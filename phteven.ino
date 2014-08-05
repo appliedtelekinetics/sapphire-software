@@ -46,9 +46,13 @@ boolean key_pressed = false;
 
 uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 
-void setup() {
-  delay(1000);
+// Delay for bluetooth module after responding with "AOK"
+#define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
+#define BLUETOOTH_RESET_DELAY  2000   // delay in ms
 
+char rxBuffer[64];
+
+void setup() {
   Serial.begin(9600);
   bluetooth.begin(9600);
 
@@ -110,9 +114,9 @@ void loop() {
           Serial.println("Home");
           break;
         case 0b00001010:  // C + A
-          keycode = 8; // HEX 0x8, DEC 8
+//          keycode = 8; // HEX 0x8, DEC 8
           Serial.println("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
-          // enter_pairing_mode();
+          enter_pairing_mode();
           break;
       }
 
@@ -152,40 +156,90 @@ SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
 void  bluetoothSetup() {
-  delay(5000);
+  delay(1000);
   Serial.println("Setting up bluetooth module");
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
-  bluetooth.print("$$$"); // Command Mode 
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  bluetooth.println("SF,1"); // Reset to factory defaults
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  delay(200);
-  bluetooth.println("SH,0207"); // connect to 3 stored hosts max (0200 default)
-  // while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  bluetooth.println("S-,PHTEVEN");
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  bluetooth.println("SN,PHTEVEN");
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  // bluetooth.println("SP,1234");
-  // while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  // bluetooth.println("SA,1");
-  // while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  // bluetooth.println("SM,0");
-  // while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  bluetooth.println("S~,6"); // HID Mode
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  bluetooth.println("R,1"); // Reboot
-  while (bluetooth.available()) { Serial.write(bluetooth.read()); }
-  delay(500);
+  bluetooth.write('$');
+  bluetooth.write('$');
+  bluetooth.write('$');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  
+  bluetooth.print("SM,5");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  
+  bluetooth.print("SH,0200");
+//  bluetooth.print("SH,0207");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  
+  bluetooth.print("S-,PHTEVEN");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  
+  bluetooth.print("SA,2");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  
+  bluetooth.print("S~,6");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+//  
+//  bluetooth.print("R,1");
+//  bluetooth.write('\r');
+//  delay(BLUETOOTH_RESET_DELAY);
+  Serial.println("Setup complete");
+  
+  Serial.println("Trying to reconnect");
+  bluetooth.print("C");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  Serial.println(rxBuffer);
+//  if (bluetoothCheckReceive(rxBuffer, "TRYING", 6)) {
+//    Serial.println("Reconnecting to stored address");
+//  } else if(bluetoothCheckReceive(rxBuffer, "No Remote Address!", 18)) {
+//    Serial.println("Module claims no remote address");
+//    bluetooth.print("GR");
+//    bluetooth.write('\r');
+//    delay(BLUETOOTH_RESPONSE_DELAY);
+//    bluetoothReceive(rxBuffer);
+//    Serial.println(rxBuffer);
+//  }
+// C
+// TRYING
+// No Remote Address!
+// GR
+// F8279331A8A9
+// C,F8279331A8A9
+// TRYING
 }
 
-// void enter_pairing_mode() {
-//   Serial.println("Pairing mode");
-//   bluetooth.println("K,1"); // kill active connection
-//   bluetooth.print("$$$");        // enter command mode
-//   bluetooth.println("SM,6");   // trigger pairing mode (SM,6)
-// }
+ void enter_pairing_mode() {
+  Serial.println("Pairing mode");
+  digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
+  delay(500);
+  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
+  bluetooth.write('$');
+  bluetooth.write('$');
+  bluetooth.write('$');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  bluetooth.print("SM,6");   // trigger pairing mode (SM,6)
+  bluetooth.write('\r');
+  
+  bluetooth.print("R,1");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESET_DELAY);
+  Serial.println("Pairing mode complete");
+ }
 
 void send_consumer_key(uint16_t keycode) {
   byte high_byte = highByte(keycode);
@@ -206,3 +260,42 @@ void release_consumer_key() {
   bluetooth.write((byte)0x00); // high byte
   bluetooth.write((byte)0x00); // low byte
 } 
+
+uint8_t bluetoothReceive(char * dest)
+{
+  int timeout = 1000;
+  char c;
+  int i = 0;
+
+  while ((--timeout > 0) && (c != 0x0A))
+  {
+    if (bluetooth.available())
+    {
+      c = bluetooth.read();
+      if (c != 0x0D)
+        dest[i++] = c;
+      timeout = 1000;	// reset timeout
+    }
+  }
+
+  return timeout;
+}
+
+/* This function checks two strings against eachother. A 1 is returned if
+   they're equal, a 0 otherwise. 
+   This is used to verify the response from the RN-42 module. */
+uint8_t bluetoothCheckReceive(char * src, char * expected, int bufferSize)
+{
+  int i = 0;
+  char c;
+
+  while ((src[i] != 0x0A) || (i < bufferSize))
+  {
+    if (src[i] != expected[i])
+    {
+      return 0;
+    }
+    i++;
+  }
+  return 1;
+}
