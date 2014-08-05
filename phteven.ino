@@ -1,14 +1,18 @@
 /*
   TODO:
-
-  bluetooth module stored config and reset
   bluetooth host autoconnect
   status indicator lights
 */
 
+#define DEBUGGING_MODE true
+#ifdef DEBUGGING_MODE
+  #define debug_out(msg) Serial.println(msg)
+#else
+  #define debug_out(msg) // no-op
+#endif
+
 #define MCU_BOARDUINO 0
 #define MCU_ARDUINO_MICRO 1
-#define MCU_ATTINY84_8MHZ 2
 #define TARGET_MCU MCU_BOARDUINO
 
 #if TARGET_MCU == MCU_BOARDUINO
@@ -35,7 +39,6 @@
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
 
-#elif TARGET_MCU == MCU_ARDUINO_MICRO
 #endif
 
 #include <SoftwareSerial.h>
@@ -53,7 +56,10 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 char rxBuffer[64];
 
 void setup() {
+  #ifdef DEBUGGING_MODE
   Serial.begin(9600);
+  #endif
+
   bluetooth.begin(9600);
 
   pinMode(BLUETOOTH_ENABLE_PIN, OUTPUT);
@@ -74,48 +80,48 @@ void loop() {
     if (key_pressed == false) {
       key_pressed = true;
 
-      Serial.println("Interrupt pin low");
+      debug_out("Interrupt pin low");
 
       char key_mask = 0x0;
       for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
         if (digitalRead(matrix_pins[i]) == LOW) {
-          Serial.println("Pin " + String(matrix_pins[i], DEC) + " low");
+          debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
           key_mask |= 0x01;
         } 
         key_mask <<= 0x01;
       }
 
-      Serial.println(String(key_mask, BIN));
+      debug_out(String(key_mask, BIN));
 
       uint16_t keycode = 0;
       switch (key_mask) {
         case 0b00000010: // C
           keycode = 128; // HEX 0x80, DEC 128
-          Serial.println("Play/Pause");
+          debug_out("Play/Pause");
           break;
         case 0b00000100: // B
           keycode = 256; // HEX 0x100, DEC 256
-          Serial.println("Scan Next Track");
+          debug_out("Scan Next Track");
           break;
         case 0b00001000: // A
           keycode = 512; // HEX 0x200, DEC 512
-          Serial.println("Scan Previous Track");
+          debug_out("Scan Previous Track");
           break;
         case 0b00000110:  // C + B
           keycode = 16; // HEX 0x10, DEC 16
-          Serial.println("Volume Up");
+          debug_out("Volume Up");
           break;
         case 0b00001110:  // C + B + A
           keycode = 32; // HEX 0x20, DEC 32
-          Serial.println("Volume Down");
+          debug_out("Volume Down");
           break;
         case 0b00001100:  // B + A
           keycode = 1; // HEX 0x1, DEC 1
-          Serial.println("Home");
+          debug_out("Home");
           break;
         case 0b00001010:  // C + A
 //          keycode = 8; // HEX 0x8, DEC 8
-          Serial.println("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
+          debug_out("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
           enter_pairing_mode();
           break;
       }
@@ -127,7 +133,7 @@ void loop() {
   } else {
     if (key_pressed == true) {
       release_consumer_key();
-      Serial.println("Key released\n");
+      debug_out("Key released\n");
       key_pressed = false;
     }
   }
@@ -157,7 +163,7 @@ R,1 Reboot
  */
 void  bluetoothSetup() {
   delay(1000);
-  Serial.println("Setting up bluetooth module");
+  debug_out("Setting up bluetooth module");
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
   bluetooth.write('$');
@@ -195,23 +201,23 @@ void  bluetoothSetup() {
 //  bluetooth.print("R,1");
 //  bluetooth.write('\r');
 //  delay(BLUETOOTH_RESET_DELAY);
-  Serial.println("Setup complete");
+  debug_out("Setup complete");
   
-  Serial.println("Trying to reconnect");
+  debug_out("Trying to reconnect");
   bluetooth.print("C");
   bluetooth.write('\r');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
-  Serial.println(rxBuffer);
+  debug_out(rxBuffer);
 //  if (bluetoothCheckReceive(rxBuffer, "TRYING", 6)) {
-//    Serial.println("Reconnecting to stored address");
+//    debug_out("Reconnecting to stored address");
 //  } else if(bluetoothCheckReceive(rxBuffer, "No Remote Address!", 18)) {
-//    Serial.println("Module claims no remote address");
+//    debug_out("Module claims no remote address");
 //    bluetooth.print("GR");
 //    bluetooth.write('\r');
 //    delay(BLUETOOTH_RESPONSE_DELAY);
 //    bluetoothReceive(rxBuffer);
-//    Serial.println(rxBuffer);
+//    debug_out(rxBuffer);
 //  }
 // C
 // TRYING
@@ -223,7 +229,7 @@ void  bluetoothSetup() {
 }
 
  void enter_pairing_mode() {
-  Serial.println("Pairing mode");
+  debug_out("Pairing mode");
   digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
   delay(500);
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
@@ -238,13 +244,13 @@ void  bluetoothSetup() {
   bluetooth.print("R,1");
   bluetooth.write('\r');
   delay(BLUETOOTH_RESET_DELAY);
-  Serial.println("Pairing mode complete");
+  debug_out("Pairing mode complete");
  }
 
 void send_consumer_key(uint16_t keycode) {
   byte high_byte = highByte(keycode);
   byte low_byte = lowByte(keycode);
-  Serial.println("Sending code to bluetooth. High Byte: " + String(high_byte, HEX) + ", Low Byte: " + String(low_byte, HEX));
+  debug_out("Sending code to bluetooth. High Byte: " + String(high_byte, HEX) + ", Low Byte: " + String(low_byte, HEX));
   bluetooth.write(0xFD); // Consumer Report
   bluetooth.write(0x03);
   bluetooth.write(0x03);
@@ -253,7 +259,7 @@ void send_consumer_key(uint16_t keycode) {
 }
 
 void release_consumer_key() {
-  Serial.println("Sending key release code to code to bluetooth");
+  debug_out("Sending key release code to code to bluetooth");
   bluetooth.write(0xFD); // Consumer Report
   bluetooth.write(0x03);
   bluetooth.write(0x03);
