@@ -1,7 +1,8 @@
 /*
   TODO:
-  bluetooth host autoconnect
+  Scan for key presses using interrupt ISR
   status indicator lights
+  code efficiency, DRY
 */
 
 #define DEBUGGING_MODE true
@@ -13,7 +14,7 @@
 
 #define MCU_BOARDUINO 0
 #define MCU_ARDUINO_MICRO 1
-#define TARGET_MCU MCU_BOARDUINO
+#define TARGET_MCU MCU_ARDUINO_MICRO
 
 #if TARGET_MCU == MCU_BOARDUINO
 
@@ -29,15 +30,15 @@
 
 #elif TARGET_MCU == MCU_ARDUINO_MICRO
 
-  #define BLUETOOTH_RX_PIN 5
-  #define BLUETOOTH_TX_PIN 4
+  #define BLUETOOTH_RX_PIN 8
+  #define BLUETOOTH_TX_PIN 7
 
   #define BLUETOOTH_ENABLE_PIN 6
 
   #define MATRIX_INTERRUPT_PIN 3
-  #define MATRIX_A_PIN 8
-  #define MATRIX_B_PIN 9
-  #define MATRIX_C_PIN 10
+  #define MATRIX_A_PIN 9
+  #define MATRIX_B_PIN 10
+  #define MATRIX_C_PIN 11
 
 #endif
 
@@ -91,7 +92,7 @@ void loop() {
         key_mask <<= 0x01;
       }
 
-      debug_out(String(key_mask, BIN));
+      debug_out("Key Mask: " + String(key_mask, BIN));
 
       uint16_t keycode = 0;
       switch (key_mask) {
@@ -162,7 +163,7 @@ SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
 void  bluetoothSetup() {
-  delay(1000);
+  delay(2000);
   debug_out("Setting up bluetooth module");
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
@@ -171,8 +172,8 @@ void  bluetoothSetup() {
   bluetooth.write('$');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("SM,5");
+
+  bluetooth.print("SM,4");
   bluetooth.write('\r');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
@@ -197,35 +198,28 @@ void  bluetoothSetup() {
   bluetooth.write('\r');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
-//  
-//  bluetooth.print("R,1");
-//  bluetooth.write('\r');
-//  delay(BLUETOOTH_RESET_DELAY);
-  debug_out("Setup complete");
+  
+  bluetooth.print("R,1");
+  bluetooth.write('\r');
+  bluetoothReceive(rxBuffer);
+  debug_out(rxBuffer);
+  delay(BLUETOOTH_RESET_DELAY);
+
+  bluetooth.write('$');
+  bluetooth.write('$');
+  bluetooth.write('$');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
   
   debug_out("Trying to reconnect");
+
   bluetooth.print("C");
   bluetooth.write('\r');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
-  debug_out(rxBuffer);
-//  if (bluetoothCheckReceive(rxBuffer, "TRYING", 6)) {
-//    debug_out("Reconnecting to stored address");
-//  } else if(bluetoothCheckReceive(rxBuffer, "No Remote Address!", 18)) {
-//    debug_out("Module claims no remote address");
-//    bluetooth.print("GR");
-//    bluetooth.write('\r');
-//    delay(BLUETOOTH_RESPONSE_DELAY);
-//    bluetoothReceive(rxBuffer);
-//    debug_out(rxBuffer);
-//  }
-// C
-// TRYING
-// No Remote Address!
-// GR
-// F8279331A8A9
-// C,F8279331A8A9
-// TRYING
+  debug_out(String(rxBuffer));
+
+  debug_out("Setup complete");
 }
 
  void enter_pairing_mode() {
@@ -283,7 +277,6 @@ uint8_t bluetoothReceive(char * dest)
       timeout = 1000;	// reset timeout
     }
   }
-
   return timeout;
 }
 
