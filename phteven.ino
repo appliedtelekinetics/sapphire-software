@@ -1,7 +1,22 @@
 /*
   TODO:
   Scan for key presses using interrupt ISR
+  get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
+  enable status reports from module and read them regularly, watching for disconnection
+  periodically query module for connection status
+  don't set profile to HID and reboot if already in hid mode
+  don't set hid flag register if it's already what we want
+  don't set name if it's already what we want
+  don't set authentication method  if it's already what we want
+
+  "After first pairing the host to a device with the Bluetooth HID module, the host initiates a connection. However, if the initial connection is broken, as the case when the power is cycled, the device must re-connect to the host. (The host will not initiate a connec- tion.)
+Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect back to the last paired host. Alternatively, you can reconnect by sending the C command from command mode. See the following examples:
+
+    SM,4 // Use GPIO6 to make and break connections
+    SM,6 // Automatically make connections without using GPIO6
+
   status indicator lights
+  if we have a stored mac, set to SM,4 mode. If no address, go to pairing mode
   code efficiency, DRY
 */
 
