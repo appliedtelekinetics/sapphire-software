@@ -25,7 +25,8 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
 
 #define MCU_BOARDUINO 0
 #define MCU_ARDUINO_MICRO 1
-#define TARGET_MCU MCU_ARDUINO_MICRO
+#define MCU_ATTINY84 2
+#define TARGET_MCU MCU_ATTINY84
 
 #if TARGET_MCU == MCU_BOARDUINO
 
@@ -50,6 +51,18 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   #define MATRIX_A_PIN 9
   #define MATRIX_B_PIN 10
   #define MATRIX_C_PIN 11
+
+#elif TARGET_MCU == MCU_ATTINY84
+
+  #define BLUETOOTH_RX_PIN 1
+  #define BLUETOOTH_TX_PIN 0
+
+  #define BLUETOOTH_ENABLE_PIN 3
+
+  #define MATRIX_INTERRUPT_PIN 2
+  #define MATRIX_A_PIN 8
+  #define MATRIX_B_PIN 9
+  #define MATRIX_C_PIN 10
 
 #endif
 
@@ -222,7 +235,10 @@ SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
 void bluetoothSetup() {
-  delay(2000);
+  #ifdef DEBUGGING_MODE
+  // additional time to open terminal
+  delay(3000);
+  #endif
   debug_out("Setting up bluetooth module");
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
