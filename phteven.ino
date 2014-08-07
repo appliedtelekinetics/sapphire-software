@@ -4,10 +4,7 @@
   get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
   enable status reports from module and read them regularly, watching for disconnection
   periodically query module for connection status
-  don't set profile to HID and reboot if already in hid mode
-  don't set hid flag register if it's already what we want
   don't set name if it's already what we want
-  don't set authentication method  if it's already what we want
 
   "After first pairing the host to a device with the Bluetooth HID module, the host initiates a connection. However, if the initial connection is broken, as the case when the power is cycled, the device must re-connect to the host. (The host will not initiate a connec- tion.)
 Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect back to the last paired host. Alternatively, you can reconnect by sending the C command from command mode. See the following examples:
@@ -16,7 +13,6 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
     SM,6 // Automatically make connections without using GPIO6
 
   status indicator lights
-  if we have a stored mac, set to SM,4 mode. If no address, go to pairing mode
   code efficiency, DRY
 */
 
@@ -61,6 +57,8 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
 
+char rxBuffer[64];
+
 boolean key_pressed = false;
 
 uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
@@ -68,8 +66,6 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
 #define BLUETOOTH_RESET_DELAY  2000   // delay in ms
-
-char rxBuffer[64];
 
 void setup() {
   #ifdef DEBUGGING_MODE
@@ -87,8 +83,6 @@ void setup() {
   for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
-
-
 }
 
 void loop() {
@@ -138,7 +132,9 @@ void loop() {
         case 0b00001010:  // C + A
 //          keycode = 8; // HEX 0x8, DEC 8
           debug_out("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
-          enter_pairing_mode();
+          
+          enterPairingMode();
+
           break;
       }
 
@@ -154,6 +150,54 @@ void loop() {
     }
   }
   delay(10);
+}
+
+boolean enterCommandMode() {
+  debug_out("Entering command mode");
+  bluetooth.write('$');
+  bluetooth.write('$');
+  bluetooth.write('$');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+}
+
+void sendCommand(char * cmd) {
+  debug_out("Sending command '" + String(cmd) + "'");
+  bluetooth.print(cmd);
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+}
+
+boolean expectedResponse(char * src, char * expected, int bufferSize) {
+  if (bluetoothCheckReceive(src, expected, bufferSize)) {
+    debug_out("\tsuccessful");
+    return true;
+  } else {
+    debug_out("\tERROR");
+    debug_out(src);
+    debug_out("\tEND");
+    return false;
+  }
+}
+
+void enterPairingMode() {
+  digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
+  delay(500);
+  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
+
+  enterCommandMode();
+  bluetoothReceive(rxBuffer);
+  debug_out(rxBuffer);
+  expectedResponse(rxBuffer, "CMD", 3);
+
+  sendCommand("SM,6");
+  bluetoothReceive(rxBuffer);
+  expectedResponse(rxBuffer, "AOK", 3);
+
+  sendCommand("---");
+  bluetoothReceive(rxBuffer);
+  expectedResponse(rxBuffer, "END", 3);
+
+  debug_out("Pairing mode complete");
 }
 
 /* Command mode ($$$) commands:
@@ -177,84 +221,73 @@ SA,<flag> set authentication method (0, Open, 1, Keyboard I/O Mode (Default), 2 
 SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
-void  bluetoothSetup() {
+void bluetoothSetup() {
   delay(2000);
   debug_out("Setting up bluetooth module");
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
-  bluetooth.write('$');
-  bluetooth.write('$');
-  bluetooth.write('$');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
 
-  bluetooth.print("SM,4");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
+  enterCommandMode();
   bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("SH,0200");
-//  bluetooth.print("SH,0207");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("S-,PHTEVEN");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("SA,2");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("S~,6");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  
-  bluetooth.print("R,1");
-  bluetooth.write('\r');
-  bluetoothReceive(rxBuffer);
-  debug_out(rxBuffer);
-  delay(BLUETOOTH_RESET_DELAY);
+  expectedResponse(rxBuffer, "CMD", 3);
 
-  bluetooth.write('$');
-  bluetooth.write('$');
-  bluetooth.write('$');
-  delay(BLUETOOTH_RESPONSE_DELAY);
+  sendCommand("GM");
   bluetoothReceive(rxBuffer);
-  
-  debug_out("Trying to reconnect");
+  if (expectedResponse(rxBuffer, "Pair", 4)) {
+    debug_out("Already in Pairing Mode");
+  } else {
+    sendCommand("SM,6");
+    bluetoothReceive(rxBuffer);
+    expectedResponse(rxBuffer, "AOK", 3);
+  }
 
-  bluetooth.print("C");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
+  sendCommand("GH");
   bluetoothReceive(rxBuffer);
-  debug_out(String(rxBuffer));
+  if (expectedResponse(rxBuffer, "0200", 4)) {
+    debug_out("Already using correct HID hash");
+  } else {
+    sendCommand("SH,0200");
+    // sendCommand("SH,0203");
+    bluetoothReceive(rxBuffer);
+    expectedResponse(rxBuffer, "AOK", 3);
+  }
+
+  // Add a check with the GN command here so we don't needlessly set this
+  sendCommand("S-,PHTEVEN");
+  bluetoothReceive(rxBuffer);
+  expectedResponse(rxBuffer, "AOK", 3);
+  
+  sendCommand("GA");
+  bluetoothReceive(rxBuffer);
+  if (expectedResponse(rxBuffer, "2", 1)) {
+    debug_out("Already in correct auth mode");
+  } else {
+    sendCommand("SA,2");
+    bluetoothReceive(rxBuffer);
+    expectedResponse(rxBuffer, "AOK", 3);
+  }
+
+  sendCommand("G~");
+  bluetoothReceive(rxBuffer);
+  if (expectedResponse(rxBuffer, "6", 1)) {
+    debug_out("Already in HID Mode");
+  } else {
+    sendCommand("S~,6");
+    bluetoothReceive(rxBuffer);
+    expectedResponse(rxBuffer, "AOK", 3);
+
+    sendCommand("R,1"); // reboot to change profile
+    bluetoothReceive(rxBuffer);
+    delay(BLUETOOTH_RESET_DELAY);
+    expectedResponse(rxBuffer, "Reboot!", 7);  
+  }
+  
+  sendCommand("---");
+  bluetoothReceive(rxBuffer);
+  expectedResponse(rxBuffer, "END", 3);
 
   debug_out("Setup complete");
 }
-
- void enter_pairing_mode() {
-  debug_out("Pairing mode");
-  digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
-  delay(500);
-  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
-  bluetooth.write('$');
-  bluetooth.write('$');
-  bluetooth.write('$');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  bluetooth.print("SM,6");   // trigger pairing mode (SM,6)
-  bluetooth.write('\r');
-  
-  bluetooth.print("R,1");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESET_DELAY);
-  debug_out("Pairing mode complete");
- }
 
 void send_consumer_key(uint16_t keycode) {
   byte high_byte = highByte(keycode);
