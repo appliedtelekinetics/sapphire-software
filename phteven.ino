@@ -16,7 +16,7 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   code efficiency, DRY
 */
 
-#define DEBUGGING_MODE true
+#define DEBUGGING_MODE
 #ifdef DEBUGGING_MODE
   #define debug_out(msg) Serial.println(msg)
 #else
