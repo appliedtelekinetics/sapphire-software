@@ -23,12 +23,7 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   #define debug_out(msg) // no-op
 #endif
 
-#define MCU_BOARDUINO 0
-#define MCU_ARDUINO_MICRO 1
-#define MCU_ATTINY84 2
-#define TARGET_MCU MCU_ATTINY84
-
-#if TARGET_MCU == MCU_BOARDUINO
+#ifdef __AVR_ATmega328P__ // Duemilanove/Uno/Boarduino
 
   #define BLUETOOTH_RX_PIN 5
   #define BLUETOOTH_TX_PIN 4
@@ -40,7 +35,7 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
 
-#elif TARGET_MCU == MCU_ARDUINO_MICRO
+#elif __AVR_ATmega32U4__ // Micro/Leonardo
 
   #define BLUETOOTH_RX_PIN 8
   #define BLUETOOTH_TX_PIN 7
@@ -52,18 +47,18 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   #define MATRIX_B_PIN 10
   #define MATRIX_C_PIN 11
 
-#elif TARGET_MCU == MCU_ATTINY84
+#else
+  #error Unkown Processor Type
+  // ATTiny84
+  // #define BLUETOOTH_RX_PIN 1
+  // #define BLUETOOTH_TX_PIN 0
 
-  #define BLUETOOTH_RX_PIN 1
-  #define BLUETOOTH_TX_PIN 0
+  // #define BLUETOOTH_ENABLE_PIN 3
 
-  #define BLUETOOTH_ENABLE_PIN 3
-
-  #define MATRIX_INTERRUPT_PIN 2
-  #define MATRIX_A_PIN 8
-  #define MATRIX_B_PIN 9
-  #define MATRIX_C_PIN 10
-
+  // #define MATRIX_INTERRUPT_PIN 2
+  // #define MATRIX_A_PIN 8
+  // #define MATRIX_B_PIN 9
+  // #define MATRIX_C_PIN 10
 #endif
 
 #include <SoftwareSerial.h>
@@ -182,7 +177,7 @@ void sendCommand(char * cmd) {
 
 boolean expectedResponse(char * src, char * expected, int bufferSize) {
   if (bluetoothCheckReceive(src, expected, bufferSize)) {
-    debug_out("\tsuccessful");
+    debug_out("\tGot expected response: " + String(expected));
     return true;
   } else {
     debug_out("\tERROR");
@@ -350,7 +345,7 @@ uint8_t bluetoothReceive(char * dest)
 uint8_t bluetoothCheckReceive(char * src, char * expected, int bufferSize)
 {
   int i = 0;
-  char c;
+  // char c; // complier clains this is ununsed
 
   while ((src[i] != 0x0A) || (i < bufferSize))
   {
