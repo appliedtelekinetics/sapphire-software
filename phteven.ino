@@ -165,7 +165,7 @@ void loop() {
   delay(10);
 }
 
-boolean enterCommandMode() {
+void enterCommandMode() {
   debug_out("Entering command mode");
   bluetooth.write('$');
   bluetooth.write('$');
