@@ -65,7 +65,14 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
 
-char rxBuffer[64];
+typedef struct commandWithCallback {
+  char cmd[20];
+  char expected[20];
+  uint8_t bufferSize;
+  void (*callback)();
+} commandWithCallback;
+
+char rxBuffer[32];  // was 64, but I doubt we need this
 
 boolean key_pressed = false;
 
@@ -73,7 +80,7 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
-#define BLUETOOTH_RESET_DELAY  2000   // delay in ms
+#define BLUETOOTH_RESET_DELAY    2000 // delay in ms
 
 void setup() {
   #ifdef DEBUGGING_MODE
@@ -94,15 +101,15 @@ void setup() {
 }
 
 void loop() {
-  if (digitalRead(MATRIX_INTERRUPT_PIN) == LOW) {
-    if (key_pressed == false) {
+  if (!digitalRead(MATRIX_INTERRUPT_PIN)) {
+    if (!key_pressed) {
       key_pressed = true;
 
       debug_out("Interrupt pin low");
 
       char key_mask = 0x0;
       for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
-        if (digitalRead(matrix_pins[i]) == LOW) {
+        if (!digitalRead(matrix_pins[i])) {
           debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
           key_mask |= 0x01;
         } 
@@ -146,66 +153,16 @@ void loop() {
           break;
       }
 
-      if (keycode > 0) {
-        send_consumer_key(keycode);
-      }
+      send_consumer_key(keycode);
     }
   } else {
     if (key_pressed == true) {
-      release_consumer_key();
       debug_out("Key released\n");
+      send_consumer_key(0x0);
       key_pressed = false;
     }
   }
   delay(10);
-}
-
-void enterCommandMode() {
-  debug_out("Entering command mode");
-  bluetooth.write('$');
-  bluetooth.write('$');
-  bluetooth.write('$');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-}
-
-void sendCommand(char * cmd) {
-  debug_out("Sending command '" + String(cmd) + "'");
-  bluetooth.print(cmd);
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-}
-
-boolean expectedResponse(char * src, char * expected, int bufferSize) {
-  if (bluetoothCheckReceive(src, expected, bufferSize)) {
-    debug_out("\tGot expected response: " + String(expected));
-    return true;
-  } else {
-    debug_out("\tERROR");
-    debug_out(src);
-    debug_out("\tEND");
-    return false;
-  }
-}
-
-void enterPairingMode() {
-  digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
-  delay(500);
-  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
-
-  enterCommandMode();
-  bluetoothReceive(rxBuffer);
-  debug_out(rxBuffer);
-  expectedResponse(rxBuffer, "CMD", 3);
-
-  sendCommand("SM,6");
-  bluetoothReceive(rxBuffer);
-  expectedResponse(rxBuffer, "AOK", 3);
-
-  sendCommand("---");
-  bluetoothReceive(rxBuffer);
-  expectedResponse(rxBuffer, "END", 3);
-
-  debug_out("Pairing mode complete");
 }
 
 /* Command mode ($$$) commands:
@@ -229,6 +186,23 @@ SA,<flag> set authentication method (0, Open, 1, Keyboard I/O Mode (Default), 2 
 SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
+
+void setName() {
+  bluetooth.flush();
+  debug_out("Setting name \"S-,PHTEVEN\"");
+  bluetooth.print("S-,PHTEVEN");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+    debug_out("\tName set");
+  } else {
+    debug_out("\tError setting name:");
+    debug_out(rxBuffer);
+    debug_out("\tEND");
+  }
+}
+
 void bluetoothSetup() {
   #ifdef DEBUGGING_MODE
   // additional time to open terminal
@@ -238,65 +212,110 @@ void bluetoothSetup() {
   digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
 
-  enterCommandMode();
-  bluetoothReceive(rxBuffer);
-  expectedResponse(rxBuffer, "CMD", 3);
-
-  sendCommand("GM");
-  bluetoothReceive(rxBuffer);
-  if (expectedResponse(rxBuffer, "Pair", 4)) {
-    debug_out("Already in Pairing Mode");
-  } else {
-    sendCommand("SM,6");
-    bluetoothReceive(rxBuffer);
-    expectedResponse(rxBuffer, "AOK", 3);
-  }
-
-  sendCommand("GH");
-  bluetoothReceive(rxBuffer);
-  if (expectedResponse(rxBuffer, "0200", 4)) {
-    debug_out("Already using correct HID hash");
-  } else {
-    sendCommand("SH,0200");
-    //sendCommand("SH,0300"); // 0300 to toggle ios keyboard
-    // sendCommand("SH,0203");
-    bluetoothReceive(rxBuffer);
-    expectedResponse(rxBuffer, "AOK", 3);
-  }
-
-  // Add a check with the GN command here so we don't needlessly set this
-  sendCommand("S-,PHTEVEN");
-  bluetoothReceive(rxBuffer);
-  expectedResponse(rxBuffer, "AOK", 3);
+  int timeout = 1000;  // timeout, in the rare case the module is unresponsive
+  bluetooth.write((uint8_t) 0); // Disconnects, if connected
+  delay(BLUETOOTH_RESPONSE_DELAY);
   
-  sendCommand("GA");
-  bluetoothReceive(rxBuffer);
-  if (expectedResponse(rxBuffer, "2", 1)) {
-    debug_out("Already in correct auth mode");
-  } else {
-    sendCommand("SA,2");
-    bluetoothReceive(rxBuffer);
-    expectedResponse(rxBuffer, "AOK", 3);
-  }
-
-  sendCommand("G~");
-  bluetoothReceive(rxBuffer);
-  if (expectedResponse(rxBuffer, "6", 1)) {
-    debug_out("Already in HID Mode");
-  } else {
-    sendCommand("S~,6");
-    bluetoothReceive(rxBuffer);
-    expectedResponse(rxBuffer, "AOK", 3);
-
-    sendCommand("R,1"); // reboot to change profile
-    bluetoothReceive(rxBuffer);
-    delay(BLUETOOTH_RESET_DELAY);
-    expectedResponse(rxBuffer, "Reboot!", 7);  
-  }
+  bluetooth.flush();  // delete buffer contents
+  bluetooth.print("$$$");  // Command mode string
+  do // This gets the module out of state 3
+  {  // continuously send \r until there is a response, usually '?'
+    bluetooth.write('\r');  
+    debug_out("-");  // Debug info for how many \r's required to get a respsonse
+  } while ((!bluetooth.available()) && (timeout-- > 0));
   
-  sendCommand("---");
-  bluetoothReceive(rxBuffer);
-  expectedResponse(rxBuffer, "END", 3);
+  while (bluetooth.available())
+    Serial.write(bluetooth.read());
+  delay(BLUETOOTH_RESPONSE_DELAY);
+
+  commandWithCallback cmds[] = {
+    { "GM", "Pair", 4 },
+    { "GH", "0200", 4 },
+    { "GN", "PHTEVEN", 7, &setName },
+    { "GA", "2", 1 },
+    { "G~", "6", 1 },
+    { "---", "END", 3 }
+  };
+
+  for(uint8_t i = 0; i < 6; i++) {
+    bluetooth.flush();
+    debug_out("Sending command '" + String(cmds[i].cmd) + "'");
+    bluetooth.print(cmds[i].cmd);
+    bluetooth.write('\r');
+    delay(BLUETOOTH_RESPONSE_DELAY);
+    bluetoothReceive(rxBuffer);
+    if (bluetoothCheckReceive(rxBuffer, cmds[i].expected, cmds[i].bufferSize)) {
+      debug_out("\tGot expected response: " + String(cmds[i].expected));
+    } else {
+      debug_out("\tERROR");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+      if (cmds[i].callback) {
+        debug_out("executing callback");
+        cmds[i].callback();
+      }
+    }
+  }
+
+  // enterCommandMode();
+  // bluetoothReceive(rxBuffer);
+  // expectedResponse(rxBuffer, "CMD", 3);
+
+  // sendCommand("GM");
+  // bluetoothReceive(rxBuffer);
+  // if (expectedResponse(rxBuffer, "Pair", 4)) {
+  //   debug_out("Already in Pairing Mode");
+  // } else {
+  //   sendCommand("SM,6");
+  //   bluetoothReceive(rxBuffer);
+  //   expectedResponse(rxBuffer, "AOK", 3);
+  // }
+
+  // sendCommand("GH");
+  // bluetoothReceive(rxBuffer);
+  // if (expectedResponse(rxBuffer, "0200", 4)) {
+  //   debug_out("Already using correct HID hash");
+  // } else {
+  //   sendCommand("SH,0200");
+  //   //sendCommand("SH,0300"); // 0300 to toggle ios keyboard
+  //   // sendCommand("SH,0203");
+  //   bluetoothReceive(rxBuffer);
+  //   expectedResponse(rxBuffer, "AOK", 3);
+  // }
+
+  // // Add a check with the GN command here so we don't needlessly set this
+  // sendCommand("S-,PHTEVEN");
+  // bluetoothReceive(rxBuffer);
+  // expectedResponse(rxBuffer, "AOK", 3);
+  
+  // sendCommand("GA");
+  // bluetoothReceive(rxBuffer);
+  // if (expectedResponse(rxBuffer, "2", 1)) {
+  //   debug_out("Already in correct auth mode");
+  // } else {
+  //   sendCommand("SA,2");
+  //   bluetoothReceive(rxBuffer);
+  //   expectedResponse(rxBuffer, "AOK", 3);
+  // }
+
+  // sendCommand("G~");
+  // bluetoothReceive(rxBuffer);
+  // if (expectedResponse(rxBuffer, "6", 1)) {
+  //   debug_out("Already in HID Mode");
+  // } else {
+  //   sendCommand("S~,6");
+  //   bluetoothReceive(rxBuffer);
+  //   expectedResponse(rxBuffer, "AOK", 3);
+
+  //   sendCommand("R,1"); // reboot to change profile
+  //   bluetoothReceive(rxBuffer);
+  //   delay(BLUETOOTH_RESET_DELAY);
+  //   expectedResponse(rxBuffer, "Reboot!", 7);  
+  // }
+  
+  // sendCommand("---");
+  // bluetoothReceive(rxBuffer);
+  // expectedResponse(rxBuffer, "END", 3);
 
   debug_out("Setup complete");
 }
@@ -311,15 +330,6 @@ void send_consumer_key(uint16_t keycode) {
   bluetooth.write((byte)low_byte); // low byte
   bluetooth.write((byte)high_byte); // high byte
 }
-
-void release_consumer_key() {
-  debug_out("Sending key release code to code to bluetooth");
-  bluetooth.write(0xFD); // Consumer Report
-  bluetooth.write(0x03);
-  bluetooth.write(0x03);
-  bluetooth.write((byte)0x00); // high byte
-  bluetooth.write((byte)0x00); // low byte
-} 
 
 uint8_t bluetoothReceive(char * dest)
 {
