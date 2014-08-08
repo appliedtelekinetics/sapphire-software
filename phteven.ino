@@ -14,8 +14,8 @@
   - code efficiency, DRY
 */
 
-#define DEBUG
-#ifdef DEBUG
+// #define DEBUG
+#ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
 #else
   #define debug_out(msg) // no-op
@@ -46,38 +46,39 @@
   #define MATRIX_C_PIN 11
 
 #else
-  #error Unkown Processor Type
+  #warning Unkown Processor Type
   // ATTiny84
-  // #define BLUETOOTH_RX_PIN 1
-  // #define BLUETOOTH_TX_PIN 0
+  #define BLUETOOTH_RX_PIN 1
+  #define BLUETOOTH_TX_PIN 0
 
-  // #define BLUETOOTH_ENABLE_PIN 3
+  #define BLUETOOTH_ENABLE_PIN 3
 
-  // #define MATRIX_INTERRUPT_PIN 2
-  // #define MATRIX_A_PIN 8
-  // #define MATRIX_B_PIN 9
-  // #define MATRIX_C_PIN 10
+  #define MATRIX_INTERRUPT_PIN 2
+  #define MATRIX_A_PIN 8
+  #define MATRIX_B_PIN 9
+  #define MATRIX_C_PIN 10
 #endif
 
 #include <SoftwareSerial.h>
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
 
-typedef struct commandWithCallback {
+struct commandWithCallback {
   char cmd[20];
   char expected[20];
   uint8_t bufferSize;
+  int8_t failure_index;
   void (*callback)();
-} commandWithCallback;
+};
 
-typedef struct keyMap {
+struct keyMap {
   uint8_t key_mask;
   uint16_t key_code;
-} keyMap;
+};
 
                        // LOW    MASK  TARGET  TARGET
                        // LINES  DEC   HEX     DEC     DESC
-static keyMap keyMaps[] = {
+static struct keyMap keyMaps[] = {
   { 0b00000010, 128 }, // C      2  -> 0x80    128     Play/Pause
   { 0b00000100, 256 }, // B      4  -> 0x100   256     Scan Next Track
   { 0b00001000, 512 }, // A      8  -> 0x200   512     Scan Previous Track
@@ -214,79 +215,6 @@ SH,<flag> Set HID flag register (default 0200), get with GH
 R,1 Reboot
  */
 
-void setName() {
-  bluetooth.flush();
-  debug_out("Setting name \"S-,PHTEVEN\"");
-  bluetooth.print("S-,PHTEVEN");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  #ifdef DEBUG
-    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
-      debug_out("\tName set");
-    } else {
-      debug_out("\tError setting name:");
-      debug_out(rxBuffer);
-      debug_out("\tEND");
-    }
-  #endif
-}
-
-void setMode() {
-  bluetooth.flush();
-  debug_out("Setting mode \"SM,6\"");
-  bluetooth.print("SM,6");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  #ifdef DEBUG
-    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
-      debug_out("tMode set");
-    } else {
-      debug_out("\tError setting mode:");
-      debug_out(rxBuffer);
-      debug_out("\tEND");
-    }
-  #endif
-}
-
-void setHash() {
-  bluetooth.flush();
-  debug_out("Setting HID hash \"SH,0200\"");
-  // Default is 0200. 0300 will toggle iOS keyboard on connect
-  bluetooth.print("SH,0200");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  #ifdef DEBUG
-    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
-      debug_out("Hid hash set");
-    } else {
-      debug_out("\tError setting Hid hash:");
-      debug_out(rxBuffer);
-      debug_out("\tEND");
-    }
-  #endif
-}
-
-void setAuthMode() {
-  bluetooth.flush();
-  debug_out("Setting auth mode \"SA,2\"");
-  bluetooth.print("SA,2");
-  bluetooth.write('\r');
-  delay(BLUETOOTH_RESPONSE_DELAY);
-  bluetoothReceive(rxBuffer);
-  #ifdef DEBUG
-    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
-      debug_out("Auth mode set");
-    } else {
-      debug_out("\tError setting auth mode:");
-      debug_out(rxBuffer);
-      debug_out("\tEND");
-    }
-  #endif
-}
-
 void setHidMode() {
   bluetooth.flush();
   debug_out("Setting Hid Mode \"S~,6\"");
@@ -322,7 +250,7 @@ void setHidMode() {
         debug_out("\tEND");
       }
     }
-  #elif
+  #else
     /*
       if not in debug mode, we don't care about the response from the
       mode set command because we can't do anything about it so we
@@ -373,39 +301,57 @@ void bluetoothSetup() {
   } while ((!bluetooth.available()) && (timeout-- > 0));
   
   while (bluetooth.available())
-    Serial.write(bluetooth.read());
+    #ifdef DEBUG
+      Serial.write(bluetooth.read());
+    #else
+      char c = bluetooth.read(); // useless, we just want all data read
+    #endif
   delay(BLUETOOTH_RESPONSE_DELAY);
 
-  static commandWithCallback cmds[] = {
-    { "GM", "Pair", 4, &setMode },
-    { "GH", "0200", 4, &setHash },
-    { "GN", "PHTEVEN", 7, &setName },
-    { "GA", "2", 1, &setAuthMode },
-    { "G~", "6", 1, &setHidMode },
+  static struct commandWithCallback cmds[] = {
+    { "GM", "Pair", 4, 0 },
+    { "GH", "0200", 4, 1 },
+    { "GN", "PHTEVEN", 7, 2 },
+    { "GA", "2", 1, 3 },
+    { "G~", "6", 1, -1, &setHidMode },
     { "---", "END", 3 }
   };
 
+  static struct commandWithCallback failureCmds[] = {
+    { "SM,6", "AOK", 3 },
+    { "SH,0200", "AOK", 3 }, // 0300 toggle virtual keyboard on connect
+    { "S-,PHTEVEN", "AOK", 3 },
+    { "SA,2", "AOK", 3 },
+  };
+
   for(uint8_t i = 0; i < 6; i++) {
-    bluetooth.flush();
-    debug_out("Sending command '" + String(cmds[i].cmd) + "'");
-    bluetooth.print(cmds[i].cmd);
-    bluetooth.write('\r');
-    delay(BLUETOOTH_RESPONSE_DELAY);
-    bluetoothReceive(rxBuffer);
-    if (bluetoothCheckReceive(rxBuffer, cmds[i].expected, cmds[i].bufferSize)) {
-      debug_out("\tGot expected response: " + String(cmds[i].expected));
-    } else {
-      debug_out("\tERROR");
-      debug_out(rxBuffer);
-      debug_out("\tEND");
-      if (cmds[i].callback) {
-        debug_out("executing callback");
-        cmds[i].callback();
+    if (!processCommand(cmds[i])) {
+      if (cmds[i].failure_index > -1) {
+        debug_out("executing failure command");
+        processCommand(failureCmds[cmds[i].failure_index]);
       }
     }
   }
 
   debug_out("Setup complete");
+}
+
+uint8_t processCommand(struct commandWithCallback cmd) {
+  bluetooth.flush();
+  debug_out("Sending command '" + String(cmd.cmd) + "'");
+  bluetooth.print(cmd.cmd);
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  if (bluetoothCheckReceive(rxBuffer, cmd.expected, cmd.bufferSize)) {
+    debug_out("\tGot expected response: " + String(cmd.expected));
+    return 1;
+  } else {
+    debug_out("\tERROR");
+    debug_out(rxBuffer);
+    debug_out("\tEND");
+    return 0;
+  }
 }
 
 void send_consumer_key(uint16_t keycode) {
