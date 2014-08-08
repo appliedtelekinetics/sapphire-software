@@ -138,10 +138,10 @@ void loop() {
           debug_out("Home");
           break;
         case 0b00001010:  // C + A
-//          keycode = 8; // HEX 0x8, DEC 8
+         keycode = 8; // HEX 0x8, DEC 8
           debug_out("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
           
-          enterPairingMode();
+          // enterPairingMode();
 
           break;
       }
@@ -258,6 +258,7 @@ void bluetoothSetup() {
     debug_out("Already using correct HID hash");
   } else {
     sendCommand("SH,0200");
+    //sendCommand("SH,0300"); // 0300 to toggle ios keyboard
     // sendCommand("SH,0203");
     bluetoothReceive(rxBuffer);
     expectedResponse(rxBuffer, "AOK", 3);
