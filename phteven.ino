@@ -16,7 +16,7 @@ Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect b
   code efficiency, DRY
 */
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -106,7 +106,7 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 
     struct keyCodeDescription {
       uint16_t key_code;
-      char * description;
+      char description[20];
     };
 
     static struct keyCodeDescription keyCodeDescriptions[] = {
@@ -116,7 +116,7 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
       { 16, "Volume Up" },
       { 32, "Volume Down" },
       { 1, "Home" },
-      { 8, "Keyboard Layout / Apple Virtual Keyboard Toggle" }
+      { 8, "Keyboard Toggle" } // Keyboard Layout / iOS Virtual Keyboard Toggle
     };
     #define KEY_CODE_DESCRIPTIONS_SIZE 7 // sizeof() can be problematic with struct arrays
 
@@ -125,7 +125,8 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
         return keyCodeDescriptions[i].description;
       }
     }
-    return "Unknown key code";
+
+    return 0; // unknown key code
   }
 #endif
 
@@ -173,7 +174,6 @@ void loop() {
             debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
           }
         #endif 
-          
         key_mask |= !digitalRead(matrix_pins[i]);
         key_mask <<= 0x01;
       }
@@ -364,7 +364,7 @@ void send_consumer_key(uint16_t keycode) {
 uint8_t bluetoothReceive(char * dest)
 {
   int timeout = 1000;
-  char c;
+  char c = 0; // avoid uninitialized warning
   int i = 0;
 
   while ((--timeout > 0) && (c != 0x0A))
@@ -386,7 +386,7 @@ uint8_t bluetoothReceive(char * dest)
 uint8_t bluetoothCheckReceive(char * src, char * expected, int bufferSize)
 {
   int i = 0;
-  // char c; // complier clains this is ununsed
+  // char c; // complier claims this is ununsed
 
   while ((src[i] != 0x0A) || (i < bufferSize))
   {
