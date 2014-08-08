@@ -109,10 +109,12 @@ void loop() {
 
       char key_mask = 0x0;
       for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
+        #ifdef DEBUGGING_MODE
         if (!digitalRead(matrix_pins[i])) {
           debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
-          key_mask |= 0x01;
-        } 
+        }
+        #endif 
+        key_mask |= !digitalRead(matrix_pins[i]);
         key_mask <<= 0x01;
       }
 
@@ -120,31 +122,31 @@ void loop() {
 
       uint16_t keycode = 0;
       switch (key_mask) {
-        case 0b00000010: // C
+        case 0b00000010: // C, 2
           keycode = 128; // HEX 0x80, DEC 128
           debug_out("Play/Pause");
           break;
-        case 0b00000100: // B
+        case 0b00000100: // B, 4
           keycode = 256; // HEX 0x100, DEC 256
           debug_out("Scan Next Track");
           break;
-        case 0b00001000: // A
+        case 0b00001000: // A, 8
           keycode = 512; // HEX 0x200, DEC 512
           debug_out("Scan Previous Track");
           break;
-        case 0b00000110:  // C + B
+        case 0b00000110:  // C + B, 6
           keycode = 16; // HEX 0x10, DEC 16
           debug_out("Volume Up");
           break;
-        case 0b00001110:  // C + B + A
+        case 0b00001110:  // C + B + A, 14
           keycode = 32; // HEX 0x20, DEC 32
           debug_out("Volume Down");
           break;
-        case 0b00001100:  // B + A
+        case 0b00001100:  // B + A, 12
           keycode = 1; // HEX 0x1, DEC 1
           debug_out("Home");
           break;
-        case 0b00001010:  // C + A
+        case 0b00001010:  // C + A, 10
          keycode = 8; // HEX 0x8, DEC 8
           debug_out("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
           
@@ -228,7 +230,7 @@ void bluetoothSetup() {
     Serial.write(bluetooth.read());
   delay(BLUETOOTH_RESPONSE_DELAY);
 
-  commandWithCallback cmds[] = {
+  static commandWithCallback cmds[] = {
     { "GM", "Pair", 4 },
     { "GH", "0200", 4 },
     { "GN", "PHTEVEN", 7, &setName },
