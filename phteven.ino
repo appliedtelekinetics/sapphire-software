@@ -259,7 +259,7 @@ void setHidMode() {
         debug_out("\tEND");
       }
     }
-  #elif
+  #else
     /*
       if not in debug mode, we don't care about the response from the
       mode set command because we can't do anything about it so we
@@ -340,7 +340,7 @@ void bluetoothSetup() {
         processCommand(failureCmds[cmds[i].failure_index]);
       } else if (cmds[i].callback) {
         debug_out("executing failure callback");
-        failureCmds[cmds[i].callback();
+        failureCmds[cmds[i].failure_index].callback();
       } else {
         debug_out("no failure action to take");
       }
