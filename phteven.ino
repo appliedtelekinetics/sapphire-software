@@ -1,22 +1,20 @@
 /*
   TODO:
-  Scan for key presses using interrupt ISR
-  get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
-  enable status reports from module and read them regularly, watching for disconnection
-  periodically query module for connection status
-  don't set name if it's already what we want
-
-  "After first pairing the host to a device with the Bluetooth HID module, the host initiates a connection. However, if the initial connection is broken, as the case when the power is cycled, the device must re-connect to the host. (The host will not initiate a connec- tion.)
-Using DTR mode 4 (default) or pairing mode 6 allows the module to auto-connect back to the last paired host. Alternatively, you can reconnect by sending the C command from command mode. See the following examples:
-
-    SM,4 // Use GPIO6 to make and break connections
-    SM,6 // Automatically make connections without using GPIO6
-
-  status indicator lights
-  code efficiency, DRY
+  - Scan for key presses using interrupt ISR
+  - pairing mode function
+  - keypress combination for virtual keyboard toggle ( short press pair button )
+  - pairing mode keypress ( long press pair button )
+  - factory reset function (send "SF,1" then run bluetoothSetup() or reset the MCU)
+  - factory reset button combination ( Home + Pair for 5 seconds? )
+  - get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
+  - enable status reports from module and read them regularly, watching for disconnection
+  - periodically query module for connection status
+  - don't set name if it's already what we want
+  - status indicator lights
+  - code efficiency, DRY
 */
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -78,15 +76,15 @@ typedef struct keyMap {
 } keyMap;
 
                        // LOW    MASK  TARGET  TARGET
-                       // LINES  DEC   HEX     DEC
+                       // LINES  DEC   HEX     DEC     DESC
 static keyMap keyMaps[] = {
-  { 0b00000010, 128 }, // C      2  -> 0x80    128
-  { 0b00000100, 256 }, // B      4  -> 0x100   256
-  { 0b00001000, 512 }, // A      8  -> 0x200   512
-  { 0b00000110, 16 },  // C B    6  -> 0x10    16
-  { 0b00001110, 32 },  // C B A  14 -> 0x20    32
-  { 0b00001100, 1 },   // B A    12 -> 0x1     1
-  { 0b00001010, 8 }    // C A    10 -> 0x8     8 
+  { 0b00000010, 128 }, // C      2  -> 0x80    128     Play/Pause
+  { 0b00000100, 256 }, // B      4  -> 0x100   256     Scan Next Track
+  { 0b00001000, 512 }, // A      8  -> 0x200   512     Scan Previous Track
+  { 0b00000110, 16 },  // C B    6  -> 0x10    16      Volume Up
+  { 0b00001110, 32 },  // C B A  14 -> 0x20    32      Volume Down
+  { 0b00001100, 1 },   // B A    12 -> 0x1     1       Home
+  { 0b00001010, 8 }    // C A    10 -> 0x8     8       Toggle Keyboard/Layout
 };
 #define KEY_MAPS_SIZE 7 // sizeof() can be problematic with struct arrays
 
@@ -116,7 +114,7 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
       { 16, "Volume Up" },
       { 32, "Volume Down" },
       { 1, "Home" },
-      { 8, "Keyboard Toggle" } // Keyboard Layout / iOS Virtual Keyboard Toggle
+      { 8, "Keyboard Toggle" }
     };
     #define KEY_CODE_DESCRIPTIONS_SIZE 7 // sizeof() can be problematic with struct arrays
 
@@ -126,6 +124,7 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
       }
     }
 
+    debug_out("Description not found for key code: " + String(key_code, DEC));
     return 0; // unknown key code
   }
 #endif
@@ -233,6 +232,125 @@ void setName() {
   #endif
 }
 
+void setMode() {
+  bluetooth.flush();
+  debug_out("Setting mode \"SM,6\"");
+  bluetooth.print("SM,6");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  #ifdef DEBUG
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      debug_out("tMode set");
+    } else {
+      debug_out("\tError setting mode:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  #endif
+}
+
+void setHash() {
+  bluetooth.flush();
+  debug_out("Setting HID hash \"SH,0200\"");
+  // Default is 0200. 0300 will toggle iOS keyboard on connect
+  bluetooth.print("SH,0200");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  #ifdef DEBUG
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      debug_out("Hid hash set");
+    } else {
+      debug_out("\tError setting Hid hash:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  #endif
+}
+
+void setAuthMode() {
+  bluetooth.flush();
+  debug_out("Setting auth mode \"SA,2\"");
+  bluetooth.print("SA,2");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  #ifdef DEBUG
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      debug_out("Auth mode set");
+    } else {
+      debug_out("\tError setting auth mode:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  #endif
+}
+
+void setHidMode() {
+  bluetooth.flush();
+  debug_out("Setting Hid Mode \"S~,6\"");
+  bluetooth.print("S~,6");
+  bluetooth.write('\r');
+  delay(BLUETOOTH_RESPONSE_DELAY);
+  bluetoothReceive(rxBuffer);
+  bluetooth.flush();
+
+  #ifdef DEBUG
+    // check that the auth mode was set properly
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      debug_out("Auth mode set");
+    } else {
+      debug_out("\tError setting auth mode:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      // reboot to complete mode change
+      debug_out("Rebooting to change Hid mode");
+      bluetooth.print("R,1");
+      bluetooth.write('\r');
+      delay(BLUETOOTH_RESPONSE_DELAY);
+      bluetoothReceive(rxBuffer);
+    
+      if (bluetoothCheckReceive(rxBuffer, "Reboot!", 7)) {
+        debug_out("\tReboot successful");
+      } else {
+        debug_out("\tError rebooting:");
+        debug_out(rxBuffer);
+        debug_out("\tEND");
+      }
+    }
+  #elif
+    /*
+      if not in debug mode, we don't care about the response from the
+      mode set command because we can't do anything about it so we
+      try to reboot regardless.
+    */
+    bluetooth.print("R,1");
+    bluetooth.write('\r');
+  #endif
+
+  // reboot takes longer to come back
+  delay(BLUETOOTH_RESET_DELAY);
+
+  // get back in to command mode
+  bluetooth.flush();  // delete buffer contents
+  debug_out("Returning to command mode");
+  bluetooth.print("$$$");  // Command mode string
+  bluetoothReceive(rxBuffer);
+  #ifdef DEBUG
+    if (bluetoothCheckReceive(rxBuffer, "CMD", 3)) {
+        debug_out("\tBack in command mode");
+    } else {
+      debug_out("\tError re-entering command mode:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  #endif
+}
+
 void bluetoothSetup() {
   #ifdef DEBUG
     // additional time to open terminal
@@ -259,11 +377,11 @@ void bluetoothSetup() {
   delay(BLUETOOTH_RESPONSE_DELAY);
 
   static commandWithCallback cmds[] = {
-    { "GM", "Pair", 4 },
-    { "GH", "0200", 4 },
+    { "GM", "Pair", 4, &setMode },
+    { "GH", "0200", 4, &setHash },
     { "GN", "PHTEVEN", 7, &setName },
-    { "GA", "2", 1 },
-    { "G~", "6", 1 },
+    { "GA", "2", 1, &setAuthMode },
+    { "G~", "6", 1, &setHidMode },
     { "---", "END", 3 }
   };
 
@@ -286,66 +404,6 @@ void bluetoothSetup() {
       }
     }
   }
-
-  // enterCommandMode();
-  // bluetoothReceive(rxBuffer);
-  // expectedResponse(rxBuffer, "CMD", 3);
-
-  // sendCommand("GM");
-  // bluetoothReceive(rxBuffer);
-  // if (expectedResponse(rxBuffer, "Pair", 4)) {
-  //   debug_out("Already in Pairing Mode");
-  // } else {
-  //   sendCommand("SM,6");
-  //   bluetoothReceive(rxBuffer);
-  //   expectedResponse(rxBuffer, "AOK", 3);
-  // }
-
-  // sendCommand("GH");
-  // bluetoothReceive(rxBuffer);
-  // if (expectedResponse(rxBuffer, "0200", 4)) {
-  //   debug_out("Already using correct HID hash");
-  // } else {
-  //   sendCommand("SH,0200");
-  //   //sendCommand("SH,0300"); // 0300 to toggle ios keyboard
-  //   // sendCommand("SH,0203");
-  //   bluetoothReceive(rxBuffer);
-  //   expectedResponse(rxBuffer, "AOK", 3);
-  // }
-
-  // // Add a check with the GN command here so we don't needlessly set this
-  // sendCommand("S-,PHTEVEN");
-  // bluetoothReceive(rxBuffer);
-  // expectedResponse(rxBuffer, "AOK", 3);
-  
-  // sendCommand("GA");
-  // bluetoothReceive(rxBuffer);
-  // if (expectedResponse(rxBuffer, "2", 1)) {
-  //   debug_out("Already in correct auth mode");
-  // } else {
-  //   sendCommand("SA,2");
-  //   bluetoothReceive(rxBuffer);
-  //   expectedResponse(rxBuffer, "AOK", 3);
-  // }
-
-  // sendCommand("G~");
-  // bluetoothReceive(rxBuffer);
-  // if (expectedResponse(rxBuffer, "6", 1)) {
-  //   debug_out("Already in HID Mode");
-  // } else {
-  //   sendCommand("S~,6");
-  //   bluetoothReceive(rxBuffer);
-  //   expectedResponse(rxBuffer, "AOK", 3);
-
-  //   sendCommand("R,1"); // reboot to change profile
-  //   bluetoothReceive(rxBuffer);
-  //   delay(BLUETOOTH_RESET_DELAY);
-  //   expectedResponse(rxBuffer, "Reboot!", 7);  
-  // }
-  
-  // sendCommand("---");
-  // bluetoothReceive(rxBuffer);
-  // expectedResponse(rxBuffer, "END", 3);
 
   debug_out("Setup complete");
 }
