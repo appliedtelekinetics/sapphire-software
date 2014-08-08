@@ -15,7 +15,7 @@
   - set power saving mode
 */
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -59,7 +59,7 @@
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
 #endif
-
+#include <avr/pgmspace.h>
 #include <SoftwareSerial.h>
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
@@ -79,7 +79,7 @@ struct keyMap {
 
                        // LOW    MASK  TARGET  TARGET
                        // LINES  DEC   HEX     DEC     DESC
-static struct keyMap keyMaps[] = {
+const static struct keyMap keyMaps[] PROGMEM = {
   { 0b00000010, 128 }, // C      2  -> 0x80    128     Play/Pause
   { 0b00000100, 256 }, // B      4  -> 0x100   256     Scan Next Track
   { 0b00001000, 512 }, // A      8  -> 0x200   512     Scan Previous Track
@@ -94,7 +94,7 @@ char rxBuffer[32];  // was 64, but I doubt we need this
 
 boolean key_pressed = false;
 
-uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
+const static uint8_t matrix_pins[] PROGMEM = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
@@ -317,7 +317,7 @@ void bluetoothSetup() {
     #endif
   delay(BLUETOOTH_RESPONSE_DELAY);
 
-  static struct commandWithCallback cmds[] = {
+  const static struct commandWithCallback cmds[] PROGMEM = {
     { "GM", "Pair", 4, 0 },
     { "GH", "0200", 4, 1 },
     { "GN", "PHTEVEN", 7, 2 },
@@ -326,7 +326,7 @@ void bluetoothSetup() {
     { "---", "END", 3 }
   };
 
-  static struct commandWithCallback failureCmds[] = {
+  const static struct commandWithCallback failureCmds[] PROGMEM = {
     { "SM,6", "AOK", 3 },
     { "SH,0200", "AOK", 3 }, // 0300 toggle virtual keyboard on connect
     { "S-,PHTEVEN", "AOK", 3 },
