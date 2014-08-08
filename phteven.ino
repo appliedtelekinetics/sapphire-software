@@ -167,11 +167,13 @@ void loop() {
 
       char key_mask = 0x0;
       for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
+
         #ifdef DEBUG
           if (!digitalRead(matrix_pins[i])) {
             debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
           }
         #endif 
+          
         key_mask |= !digitalRead(matrix_pins[i]);
         key_mask <<= 0x01;
       }
@@ -179,6 +181,7 @@ void loop() {
       debug_out("Key Mask: " + String(key_mask, BIN));
 
       send_consumer_key(keyMaskToKeyCode(key_mask));
+
     }
   } else {
     if (key_pressed == true) {
