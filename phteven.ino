@@ -193,26 +193,34 @@ void loop() {
   delay(10);
 }
 
-/* Command mode ($$$) commands:
-SF,1 Reset to factory defaults
-SM,6 Pairing Mode
-SM,0 Slave Mode
-SM,1 Master Mode
-SM,2 Trigger Mode
-SM,3 Auto-Connect Master Mode
-SM,4 Auto-Connect DTR Mode
-SM,5 Auto-Connect Any Mode
-SM,6 Pairing Mode 
-SN,<string> This command sets the device name,up to 20 alphanumeric characters.
-S-,<string> Sets serialized friendly name of device with MAC
-SP,<string> This command sets the security pin code (ex: SP,1234)
-SU,<value> set uart baud rate (examples: SU,96 SU,57, SU,11
-S~,6 Sets HID profile
-C connect to last stored BT address stored with SR
-SR,<mac address> Store the current bluetooth mac address
-SA,<flag> set authentication method (0, Open, 1, Keyboard I/O Mode (Default), 2 "Just works"mode ,4 auth with pin code)
-SH,<flag> Set HID flag register (default 0200), get with GH
-R,1 Reboot
+/*
+  
+SF,1
+  Reset to factory defaults
+SM,<mode> / GM
+  Set/get connection mode:
+    0 Slave Mode
+    1 Master Mode
+    2 Trigger Mode
+    3 Auto-Connect Master Mode
+    4 Auto-Connect DTR Mode
+    5 Auto-Connect Any Mode
+    6 Pairing Mode 
+SP,<string>
+  Set the security pin code (ex: SP,1234)
+SU,<value>
+  Set uart baud rate (examples: SU,96 SU,57, SU,11
+C
+  Connect to last stored BT address stored (either automatic or with SR)
+SR,<mac address> / GR
+  Set/get the current bluetooth mac address
+SA,<flag> / GA
+  Set/get authentication method
+    0 Open
+    1 Keyboard I/O Mode (Default)
+    2 "Just works" mode
+    4 Auth with pin code
+
  */
 
 void setHidMode() {
