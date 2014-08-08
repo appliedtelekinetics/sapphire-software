@@ -72,6 +72,24 @@ typedef struct commandWithCallback {
   void (*callback)();
 } commandWithCallback;
 
+typedef struct keyMap {
+  uint8_t key_mask;
+  uint16_t key_code;
+} keyMap;
+
+                       // LOW    MASK  TARGET  TARGET
+                       // LINES  DEC   HEX     DEC
+static keyMap keyMaps[] = {
+  { 0b00000010, 128 }, // C      2  -> 0x80    128
+  { 0b00000100, 256 }, // B      4  -> 0x100   256
+  { 0b00001000, 512 }, // A      8  -> 0x200   512
+  { 0b00000110, 16 },  // C B    6  -> 0x10    16
+  { 0b00001110, 32 },  // C B A  14 -> 0x20    32
+  { 0b00001100, 1 },   // B A    12 -> 0x1     1
+  { 0b00001010, 8 }    // C A    10 -> 0x8     8 
+};
+#define KEY_MAPS_SIZE 7 // sizeof() can be problematic with struct arrays
+
 char rxBuffer[32];  // was 64, but I doubt we need this
 
 boolean key_pressed = false;
@@ -81,6 +99,46 @@ uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
 #define BLUETOOTH_RESET_DELAY    2000 // delay in ms
+
+#ifdef DEBUG
+  // We don't need key descriptions outside of debug mode
+  char * getKeyCodeDescription(uint16_t key_code) {
+
+    struct keyCodeDescription {
+      uint16_t key_code;
+      char * description;
+    };
+
+    static struct keyCodeDescription keyCodeDescriptions[] = {
+      { 128, "Play/Pause" },
+      { 256, "Scan Next Track" },
+      { 512, "Scan Previous Track" },
+      { 16, "Volume Up" },
+      { 32, "Volume Down" },
+      { 1, "Home" },
+      { 8, "Keyboard Layout / Apple Virtual Keyboard Toggle" }
+    };
+    #define KEY_CODE_DESCRIPTIONS_SIZE 7 // sizeof() can be problematic with struct arrays
+
+    for(uint8_t i = 0; i < KEY_CODE_DESCRIPTIONS_SIZE; i++) {
+      if (keyCodeDescriptions[i].key_code == key_code) {
+        return keyCodeDescriptions[i].description;
+      }
+    }
+    return "Unknown key code";
+  }
+#endif
+
+uint16_t keyMaskToKeyCode(uint8_t key_mask) {
+  for(uint8_t i = 0; i < KEY_MAPS_SIZE; i++) {
+    if (keyMaps[i].key_mask == key_mask) {
+      debug_out("Key: " + String(getKeyCodeDescription(keyMaps[i].key_code)));
+      return keyMaps[i].key_code;
+    }
+  }
+  debug_out("Key not found for mask: " + String(key_mask, BIN));
+  return 0;
+}
 
 void setup() {
   #ifdef DEBUG
@@ -120,42 +178,7 @@ void loop() {
 
       debug_out("Key Mask: " + String(key_mask, BIN));
 
-      uint16_t keycode = 0;
-      switch (key_mask) {
-        case 0b00000010: // C, 2
-          keycode = 128; // HEX 0x80, DEC 128
-          debug_out("Play/Pause");
-          break;
-        case 0b00000100: // B, 4
-          keycode = 256; // HEX 0x100, DEC 256
-          debug_out("Scan Next Track");
-          break;
-        case 0b00001000: // A, 8
-          keycode = 512; // HEX 0x200, DEC 512
-          debug_out("Scan Previous Track");
-          break;
-        case 0b00000110:  // C + B, 6
-          keycode = 16; // HEX 0x10, DEC 16
-          debug_out("Volume Up");
-          break;
-        case 0b00001110:  // C + B + A, 14
-          keycode = 32; // HEX 0x20, DEC 32
-          debug_out("Volume Down");
-          break;
-        case 0b00001100:  // B + A, 12
-          keycode = 1; // HEX 0x1, DEC 1
-          debug_out("Home");
-          break;
-        case 0b00001010:  // C + A, 10
-         keycode = 8; // HEX 0x8, DEC 8
-          debug_out("Pair / Keyboard Layout (Virtual Apple Keyboard Toggle)");
-          
-          // enterPairingMode();
-
-          break;
-      }
-
-      send_consumer_key(keycode);
+      send_consumer_key(keyMaskToKeyCode(key_mask));
     }
   } else {
     if (key_pressed == true) {
@@ -196,13 +219,15 @@ void setName() {
   bluetooth.write('\r');
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
-  if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
-    debug_out("\tName set");
-  } else {
-    debug_out("\tError setting name:");
-    debug_out(rxBuffer);
-    debug_out("\tEND");
-  }
+  #ifdef DEBUG
+    if (bluetoothCheckReceive(rxBuffer, "AOK", 3)) {
+      debug_out("\tName set");
+    } else {
+      debug_out("\tError setting name:");
+      debug_out(rxBuffer);
+      debug_out("\tEND");
+    }
+  #endif
 }
 
 void bluetoothSetup() {
