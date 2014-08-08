@@ -12,6 +12,7 @@
   - don't set name if it's already what we want
   - status indicator lights
   - code efficiency, DRY
+  - set power saving mode
 */
 
 #define DEBUG
@@ -337,6 +338,11 @@ void bluetoothSetup() {
       if (cmds[i].failure_index > -1) {
         debug_out("executing failure command");
         processCommand(failureCmds[cmds[i].failure_index]);
+      } else if (cmds[i].callback) {
+        debug_out("executing failure callback");
+        failureCmds[cmds[i].callback();
+      } else {
+        debug_out("no failure action to take");
       }
     }
   }
