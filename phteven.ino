@@ -15,7 +15,7 @@
   - set power saving mode
 */
 
- #define DEBUG
+#define DEBUG
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -110,7 +110,7 @@ const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
       char description[32];
     };
 
-    static struct keyCodeDescription keyCodeDescriptions[] = {
+    struct keyCodeDescription keyCodeDescriptions[] = {
       { 128, "Play/Pause" },
       { 256, "Scan Next Track" },
       { 512, "Scan Previous Track" },
