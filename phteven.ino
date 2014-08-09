@@ -15,7 +15,7 @@
   - set power saving mode
 */
 
-// #define DEBUG
+ #define DEBUG
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -77,16 +77,16 @@ struct keyMap {
   uint16_t key_code;
 };
 
-                       // LOW    MASK  TARGET  TARGET
-                       // LINES  DEC   HEX     DEC     DESC
-const static struct keyMap keyMaps[] PROGMEM = {
-  { 0b00000010, 128 }, // C      2  -> 0x80    128     Play/Pause
-  { 0b00000100, 256 }, // B      4  -> 0x100   256     Scan Next Track
-  { 0b00001000, 512 }, // A      8  -> 0x200   512     Scan Previous Track
-  { 0b00000110, 16 },  // C B    6  -> 0x10    16      Volume Up
-  { 0b00001110, 32 },  // C B A  14 -> 0x20    32      Volume Down
-  { 0b00001100, 1 },   // B A    12 -> 0x1     1       Home
-  { 0b00001010, 8 }    // C A    10 -> 0x8     8       Toggle Keyboard/Layout
+                       // LOW    MASK        TARGET  TARGET
+                       // LINES  BINARY      HEX     DEC     DESC
+const struct keyMap keyMaps[] = {
+  { 2, 128 },          // C      00000010 -> 0x80    128     Play/Pause
+  { 4, 256 },          // B      00000100 -> 0x100   256     Scan Next Track
+  { 8, 512 },          // A      00001000 -> 0x200   512     Scan Previous Track
+  { 6, 16 },           // C B    00000110 -> 0x10    16      Volume Up
+  { 14, 32 },          // C B A  00001110 -> 0x20    32      Volume Down
+  { 12, 1 },           // B A    00001100 -> 0x1     1       Home
+  { 10, 8 }            // C A    00001010 -> 0x8     8       Toggle Keyboard/Layout
 };
 #define KEY_MAPS_SIZE 7 // sizeof() can be problematic with struct arrays
 
@@ -94,7 +94,8 @@ char rxBuffer[32];  // was 64, but I doubt we need this
 
 boolean key_pressed = false;
 
-const static uint8_t matrix_pins[] PROGMEM = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
+const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
+#define MATRIX_PIN_COUNT 3
 
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
@@ -106,7 +107,7 @@ const static uint8_t matrix_pins[] PROGMEM = { MATRIX_A_PIN, MATRIX_B_PIN, MATRI
 
     struct keyCodeDescription {
       uint16_t key_code;
-      char description[20];
+      char description[32];
     };
 
     static struct keyCodeDescription keyCodeDescriptions[] = {
@@ -118,9 +119,8 @@ const static uint8_t matrix_pins[] PROGMEM = { MATRIX_A_PIN, MATRIX_B_PIN, MATRI
       { 1, "Home" },
       { 8, "Keyboard Toggle" }
     };
-    #define KEY_CODE_DESCRIPTIONS_SIZE 7 // sizeof() can be problematic with struct arrays
 
-    for(uint8_t i = 0; i < KEY_CODE_DESCRIPTIONS_SIZE; i++) {
+    for(uint8_t i = 0; i < 7; i++) {
       if (keyCodeDescriptions[i].key_code == key_code) {
         return keyCodeDescriptions[i].description;
       }
@@ -168,14 +168,11 @@ void loop() {
       debug_out("Interrupt pin low");
 
       char key_mask = 0x0;
-      for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
-
-        #ifdef DEBUG
-          if (!digitalRead(matrix_pins[i])) {
-            debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
-          }
-        #endif 
-        key_mask |= !digitalRead(matrix_pins[i]);
+      for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
+        if (digitalRead(matrix_pins[i]) == LOW) {
+          key_mask |= 0x01;
+          debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
+        }
         key_mask <<= 0x01;
       }
 
@@ -317,7 +314,7 @@ void bluetoothSetup() {
     #endif
   delay(BLUETOOTH_RESPONSE_DELAY);
 
-  const static struct commandWithCallback cmds[] PROGMEM = {
+  const struct commandWithCallback cmds[] PROGMEM = {
     { "GM", "Pair", 4, 0 },
     { "GH", "0200", 4, 1 },
     { "GN", "PHTEVEN", 7, 2 },
@@ -326,7 +323,7 @@ void bluetoothSetup() {
     { "---", "END", 3 }
   };
 
-  const static struct commandWithCallback failureCmds[] PROGMEM = {
+  const struct commandWithCallback failureCmds[] PROGMEM = {
     { "SM,6", "AOK", 3 },
     { "SH,0200", "AOK", 3 }, // 0300 toggle virtual keyboard on connect
     { "S-,PHTEVEN", "AOK", 3 },
@@ -371,7 +368,7 @@ uint8_t processCommand(struct commandWithCallback cmd) {
 void send_consumer_key(uint16_t keycode) {
   byte high_byte = highByte(keycode);
   byte low_byte = lowByte(keycode);
-  debug_out("Sending code to bluetooth. High Byte: " + String(high_byte, HEX) + ", Low Byte: " + String(low_byte, HEX));
+  debug_out("Sending code to bluetooth. High Byte: " + String(high_byte, HEX) + ", Low Byte: " + String(low_byte, HEX) + "\n");
   bluetooth.write(0xFD); // Consumer Report
   bluetooth.write(0x03);
   bluetooth.write(0x03);
