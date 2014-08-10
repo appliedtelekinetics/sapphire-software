@@ -16,6 +16,10 @@
 #define DEBUG
 #define ENABLE_SLEEP
 #define SLEEP_METHOD SLEEP_MODE_ADC
+
+// Button reading methods
+#define DISCRETE_BUTTONS
+#define MATRIX_BUTTONS
   
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
@@ -31,7 +35,20 @@
   #define BLUETOOTH_ENABLE_PIN 6
 
   #define BUTTON_INTERRUPT 3 // Pin
-  #define MATRIX_INTERRUPT_PIN 3
+
+  #define BUTTON_METHOD DISCRETE_BUTTONS
+
+  #define BUTTON_INTERRUPT_PIN 3
+  // For individual pins-per-button
+  #define PLAY_PAUSE_BUTTON_PIN 7
+  #define PREVIOUS_TRACK_BUTTON_PIN 8
+  #define NEXT_TRACK_BUTTON_PIN 9
+  #define VOLUME_UP_BUTTON_PIN 10
+  #define VOLUME_DOWN_BUTTON_PIN 11
+  #define HOME_BUTTON_PIN 12
+  #define PAIR_BUTTON_PIN 13
+
+  // For matrix buttons
   #define MATRIX_A_PIN 8
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
@@ -44,7 +61,21 @@
   #define BLUETOOTH_ENABLE_PIN 6
 
   #define BUTTON_INTERRUPT 0 // Interrupt
-  #define MATRIX_INTERRUPT_PIN 3
+
+  #define BUTTON_METHOD MATRIX_BUTTONS
+
+  #define BUTTON_INTERRUPT_PIN 3
+
+  // For individual pins-per-button
+  #define PLAY_PAUSE_BUTTON_PIN 7
+  #define PREVIOUS_TRACK_BUTTON_PIN 8
+  #define NEXT_TRACK_BUTTON_PIN 9
+  #define VOLUME_UP_BUTTON_PIN 10
+  #define VOLUME_DOWN_BUTTON_PIN 11
+  #define HOME_BUTTON_PIN 12
+  #define PAIR_BUTTON_PIN 13
+
+  // For matrix buttons
   #define MATRIX_A_PIN 9
   #define MATRIX_B_PIN 10
   #define MATRIX_C_PIN 11
@@ -58,7 +89,12 @@
   #define BLUETOOTH_ENABLE_PIN 3
 
   #define BUTTON_INTERRUPT 3 // Pin or Interrupt? Not sure
-  #define MATRIX_INTERRUPT_PIN 2
+
+  #define BUTTON_METHOD MATRIX_BUTTONS
+
+  #define BUTTON_INTERRUPT_PIN 2
+
+  // For matrix buttons
   #define MATRIX_A_PIN 8
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
@@ -100,8 +136,10 @@ char rxBuffer[32];  // was 64, but I doubt we need this
 
 boolean key_pressed = false;
 
-const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
-#define MATRIX_PIN_COUNT 3
+#ifdef BUTTON_METHOD == MATRIX_BUTTONS
+  const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
+  #define MATRIX_PIN_COUNT 3
+#endif
 
 // Delay for bluetooth module after responding with "AOK"
 #define BLUETOOTH_RESPONSE_DELAY 100  // delay in ms
@@ -159,11 +197,13 @@ void setup() {
   digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
   bluetoothSetup();
 
-  pinMode(MATRIX_INTERRUPT_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
 
-  for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
-    pinMode(matrix_pins[i], INPUT_PULLUP);
-  }
+  #ifdef BUTTON_METHOD == MATRIX_BUTTONS
+    for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
+      pinMode(matrix_pins[i], INPUT_PULLUP);
+    }
+  #endif
 
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
@@ -186,28 +226,69 @@ void loop() {
 void processButtons() {
   noInterrupts();
 
-  // if (!digitalRead(MATRIX_INTERRUPT_PIN)) {
-  while (digitalRead(MATRIX_INTERRUPT_PIN) == LOW) {
-    if (!key_pressed) {
-      key_pressed = true;
+  #ifdef BUTTON_METHOD == MATRIX_BUTTONS
 
-      debug_out("Interrupt pin low");
+    // if (!digitalRead(BUTTON_INTERRUPT_PIN)) {
+    while (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
+      if (!key_pressed) {
+        key_pressed = true;
 
-      char key_mask = 0x0;
-      for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
-        if (digitalRead(matrix_pins[i]) == LOW) {
-          key_mask |= 0x01;
-          debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
+        debug_out("Interrupt pin low");
+
+        char key_mask = 0x0;
+        for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
+          if (digitalRead(matrix_pins[i]) == LOW) {
+            key_mask |= 0x01;
+            debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
+          }
+          key_mask <<= 0x01;
         }
-        key_mask <<= 0x01;
+
+        debug_out("Key Mask: " + String(key_mask, BIN));
+
+        send_consumer_key(keyMaskToKeyCode(key_mask));
+
       }
-
-      debug_out("Key Mask: " + String(key_mask, BIN));
-
-      send_consumer_key(keyMaskToKeyCode(key_mask));
-
     }
-  }
+
+  #else
+    // discrete buttons
+
+    while (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
+      if (!key_pressed) {
+        key_pressed = true;
+
+        debug_out("Interrupt pin low");
+    
+        char key_mask = 0x0;
+        if (digitalRead(PLAY_PAUSE_BUTTON_PIN) == HIGH) {
+          debug_out("Play/Pause button: " + String(key_mask, BIN));
+          key_mask = 2;
+        } else if (digitalRead(NEXT_TRACK_BUTTON_PIN) == HIGH) {
+          debug_out("Next track button: " + String(key_mask, BIN));
+          key_mask = 4;
+        } else if (digitalRead(PREVIOUS_TRACK_BUTTON_PIN) == HIGH) {
+          debug_out("Previous track button: " + String(key_mask, BIN));
+          key_mask = 8;
+        } else if (digitalRead(VOLUME_UP_BUTTON_PIN) == HIGH) {
+          debug_out("Volume up button: " + String(key_mask, BIN));
+          key_mask = 6;
+        } else if (digitalRead(VOLUME_DOWN_BUTTON_PIN) == HIGH) {
+          debug_out("Volume down button: " + String(key_mask, BIN));
+          key_mask = 14;
+        } else if (digitalRead(HOME_BUTTON_PIN) == HIGH) {
+          debug_out("Home button: " + String(key_mask, BIN));
+          key_mask = 12;
+        } else if (digitalRead(PAIR_BUTTON_PIN) == HIGH) {
+          debug_out("Pair/keyboard button: " + String(key_mask, BIN));
+          key_mask = 10;
+        }
+
+        send_consumer_key(keyMaskToKeyCode(key_mask));
+      }
+    }
+
+  #endif
 
   if (key_pressed == true) {
     debug_out("Key released\n");
