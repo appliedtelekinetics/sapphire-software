@@ -1,6 +1,5 @@
 /*
   TODO:
-  - Scan for key presses using interrupt ISR
   - pairing mode function
   - keypress combination for virtual keyboard toggle ( short press pair button )
   - pairing mode keypress ( long press pair button )
@@ -12,10 +11,12 @@
   - don't set name if it's already what we want
   - status indicator lights
   - code efficiency, DRY
-  - set power saving mode
 */
 
 #define DEBUG
+#define ENABLE_SLEEP
+#define SLEEP_METHOD SLEEP_MODE_ADC
+  
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
 #else
@@ -29,6 +30,7 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
+  #define BUTTON_INTERRUPT 3 // Pin
   #define MATRIX_INTERRUPT_PIN 3
   #define MATRIX_A_PIN 8
   #define MATRIX_B_PIN 9
@@ -41,6 +43,7 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
+  #define BUTTON_INTERRUPT 0 // Interrupt
   #define MATRIX_INTERRUPT_PIN 3
   #define MATRIX_A_PIN 9
   #define MATRIX_B_PIN 10
@@ -54,12 +57,15 @@
 
   #define BLUETOOTH_ENABLE_PIN 3
 
+  #define BUTTON_INTERRUPT 3 // Pin or Interrupt? Not sure
   #define MATRIX_INTERRUPT_PIN 2
   #define MATRIX_A_PIN 8
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
 #endif
+
 #include <avr/pgmspace.h>
+#include <avr/sleep.h>
 #include <SoftwareSerial.h>
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
@@ -158,10 +164,30 @@ void setup() {
   for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
+
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
+
+  attachInterrupt(BUTTON_INTERRUPT, processButtons, LOW);
 }
 
 void loop() {
-  if (!digitalRead(MATRIX_INTERRUPT_PIN)) {
+  #ifdef ENABLE_SLEEP
+    // digitalWrite(13, HIGH);
+    // delay(100);
+    // digitalWrite(13, LOW);
+    // delay(100);
+    sleep_enable();
+    set_sleep_mode (SLEEP_METHOD);  
+    sleep_mode();
+  #endif
+}
+
+void processButtons() {
+  noInterrupts();
+
+  // if (!digitalRead(MATRIX_INTERRUPT_PIN)) {
+  while (digitalRead(MATRIX_INTERRUPT_PIN) == LOW) {
     if (!key_pressed) {
       key_pressed = true;
 
@@ -181,14 +207,15 @@ void loop() {
       send_consumer_key(keyMaskToKeyCode(key_mask));
 
     }
-  } else {
-    if (key_pressed == true) {
-      debug_out("Key released\n");
-      send_consumer_key(0x0);
-      key_pressed = false;
-    }
   }
-  delay(10);
+
+  if (key_pressed == true) {
+    debug_out("Key released\n");
+    send_consumer_key(0x0);
+    key_pressed = false;
+  }
+
+  interrupts();
 }
 
 /*
