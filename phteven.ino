@@ -34,7 +34,7 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
-  #define BUTTON_INTERRUPT 3 // Pin
+  #define BUTTON_INTERRUPT 2
 
   #define BUTTON_METHOD DISCRETE_BUTTONS
 
@@ -60,7 +60,7 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
-  #define BUTTON_INTERRUPT 0 // Interrupt
+  #define BUTTON_INTERRUPT 0
 
   #define BUTTON_METHOD MATRIX_BUTTONS
 
