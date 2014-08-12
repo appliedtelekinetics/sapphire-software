@@ -1,8 +1,7 @@
 /*
   TODO:
   - pairing mode function
-  - keypress combination for virtual keyboard toggle ( short press pair button )
-  - pairing mode keypress ( long press pair button )
+  - pairing mode keypress ( long press keyboard toggle button )
   - factory reset function (send "SF,1" then run bluetoothSetup() or reset the MCU)
   - factory reset button combination ( Home + Pair for 5 seconds? )
   - get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
@@ -87,8 +86,8 @@
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
 
 struct commandWithCallback {
-  char cmd[20];
-  char expected[20];
+  char cmd[12];
+  char expected[8];
   uint8_t bufferSize;
   int8_t failure_index;
   void (*callback)();
