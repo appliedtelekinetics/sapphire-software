@@ -11,14 +11,15 @@
   - don't set name if it's already what we want
   - status indicator lights
   - code efficiency, DRY
+  - button hysteresis
 */
 
 #define DEBUG
 #define ENABLE_SLEEP
-#define SLEEP_METHOD SLEEP_MODE_PWR_SAVE
+#define SLEEP_METHOD SLEEP_MODE_ADC // also defined in mcu blocks
 /* SLEEP_MODE_IDLE     - least power savings
    SLEEP_MODE_ADC
-   SLEEP_MODE_PWR_SAVE
+   SLEEP_MODE_PWR_SAVE - good
    SLEEP_MODE_STANDBY
    SLEEP_MODE_PWR_DOWN - most power savings */
   
@@ -29,6 +30,7 @@
 #endif
 
 #ifdef __AVR_ATmega328P__ // Duemilanove/Uno/Boarduino
+  #define SLEEP_METHOD SLEEP_MODE_PWR_SAVE
 
   #define BLUETOOTH_RX_PIN 5
   #define BLUETOOTH_TX_PIN 4
@@ -44,7 +46,7 @@
   #define MATRIX_C_PIN 10
 
 #elif __AVR_ATmega32U4__ // Micro/Leonardo
-
+  #define SLEEP_METHOD SLEEP_MODE_ADC
   #define BLUETOOTH_RX_PIN 8
   #define BLUETOOTH_TX_PIN 7
 
