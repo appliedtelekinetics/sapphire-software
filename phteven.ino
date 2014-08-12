@@ -12,6 +12,7 @@
   - status indicator lights
   - code efficiency, DRY
   - button hysteresis
+  - bluetooth module power saving
 */
 
 #define DEBUG
