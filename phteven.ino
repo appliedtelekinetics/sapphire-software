@@ -14,8 +14,13 @@
 */
 
 #define DEBUG
-// #define ENABLE_SLEEP
-#define SLEEP_METHOD SLEEP_MODE_ADC
+#define ENABLE_SLEEP
+#define SLEEP_METHOD SLEEP_MODE_PWR_SAVE
+/* SLEEP_MODE_IDLE     - least power savings
+   SLEEP_MODE_ADC
+   SLEEP_MODE_PWR_SAVE
+   SLEEP_MODE_STANDBY
+   SLEEP_MODE_PWR_DOWN - most power savings */
   
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
@@ -106,7 +111,14 @@ const struct keyMap keyMaps[] = {
 
 char rxBuffer[32];  // was 64, but I doubt we need this
 
-boolean key_pressed = false;
+uint16_t loop_delay_ts = millis();
+#define LOOP_DELAY 1000
+
+uint16_t key_code = 0x0;
+boolean key_released = false;
+
+volatile uint8_t sleep_loop_counter = 0;
+#define SLEEP_COUNTER_TRIGGER 5
 
 const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 #define MATRIX_PIN_COUNT 3
@@ -148,11 +160,11 @@ const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 uint16_t keyMaskToKeyCode(uint8_t key_mask) {
   for(uint8_t i = 0; i < KEY_MAPS_SIZE; i++) {
     if (keyMaps[i].key_mask == key_mask) {
-      debug_out("Key: " + String(getKeyCodeDescription(keyMaps[i].key_code)));
+      // debug_out("Key: " + String(getKeyCodeDescription(keyMaps[i].key_code)));
       return keyMaps[i].key_code;
     }
   }
-  debug_out("Key not found for mask: " + String(key_mask, BIN));
+  // debug_out("Key not found for mask: " + String(key_mask, BIN));
   return 0;
 }
 
@@ -176,51 +188,60 @@ void setup() {
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
 
-  attachInterrupt(BUTTON_INTERRUPT, processButtons, LOW);
+  attachInterrupt(BUTTON_INTERRUPT, processButtons, CHANGE);
 }
 
 void loop() {
-  // digitalWrite(13, HIGH);
-  // delay(100);
-  // digitalWrite(13, LOW);
-  // delay(100);
-  #ifdef ENABLE_SLEEP
-    sleep_enable();
-    set_sleep_mode (SLEEP_METHOD);  
-    sleep_mode();
-  #endif
+  if (key_code > 0x0) {
+    debug_out("Key: " + String(key_code));
+    send_consumer_key(key_code);
+    key_code = 0x0;
+  }
+  if (key_released) {
+    debug_out("Key released.");
+    send_consumer_key(0x0);
+    key_released = false;
+  }
+  if (millis() > (loop_delay_ts + LOOP_DELAY)) {
+    loop_delay_ts = millis();
+    debug_out(millis());
+    
+    #ifdef ENABLE_SLEEP
+      sleep_loop_counter++;
+      if (sleep_loop_counter >= SLEEP_COUNTER_TRIGGER) {
+        debug_out("Going to sleep.");
+        delay(1000);
+        sleep_loop_counter = 0;
+        set_sleep_mode(SLEEP_METHOD);
+        sleep_enable();
+        sleep_cpu();
+      }
+    #endif
+  }
 }
 
 void processButtons() {
   noInterrupts();
+  #ifdef ENABLE_SLEEP
+    sleep_disable();
+    sleep_loop_counter = 0;
+  #endif
 
-  // if (!digitalRead(BUTTON_INTERRUPT_PIN)) {
-  while (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
-    if (!key_pressed) {
-      key_pressed = true;
-
-      debug_out("Interrupt pin low");
-
+  if (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
+    if (key_code == 0x0) {
       char key_mask = 0x0;
       for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
         if (digitalRead(matrix_pins[i]) == LOW) {
           key_mask |= 0x01;
-          debug_out("Pin " + String(matrix_pins[i], DEC) + " low");
         }
         key_mask <<= 0x01;
       }
 
-      debug_out("Key Mask: " + String(key_mask, BIN));
-
-      send_consumer_key(keyMaskToKeyCode(key_mask));
+      key_code = keyMaskToKeyCode(key_mask);
 
     }
-  }
-
-  if (key_pressed == true) {
-    debug_out("Key released\n");
-    send_consumer_key(0x0);
-    key_pressed = false;
+  } else {
+    key_released = true;
   }
 
   interrupts();
