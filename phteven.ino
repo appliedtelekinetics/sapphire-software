@@ -15,7 +15,7 @@
   - bluetooth module power saving
 */
 
-#define DEBUG
+// #define DEBUG
 #define ENABLE_SLEEP
 #define SLEEP_METHOD SLEEP_MODE_ADC // also defined in mcu blocks
 /* SLEEP_MODE_IDLE     - least power savings
@@ -86,9 +86,12 @@
 
 SoftwareSerial bluetooth = SoftwareSerial(BLUETOOTH_RX_PIN, BLUETOOTH_TX_PIN); // rx, tx
 
+const char command_mode_cmd[] PROGMEM = "$$$";
+const char bluetooth_newline PROGMEM = '\r';
+
 struct commandWithCallback {
-  char cmd[20];
-  char expected[20];
+  char cmd[11];
+  char expected[8];
   uint8_t bufferSize;
   int8_t failure_index;
   void (*callback)();
@@ -101,7 +104,7 @@ struct keyMap {
 
                        // LOW    MASK        TARGET  TARGET
                        // LINES  BINARY      HEX     DEC     DESC
-const struct keyMap keyMaps[] = {
+const struct keyMap keyMaps[] PROGMEM = {
   { 2, 128 },          // C      00000010 -> 0x80    128     Play/Pause
   { 4, 256 },          // B      00000100 -> 0x100   256     Scan Next Track
   { 8, 512 },          // A      00001000 -> 0x200   512     Scan Previous Track
@@ -112,7 +115,7 @@ const struct keyMap keyMaps[] = {
 };
 #define KEY_MAPS_SIZE 7 // sizeof() can be problematic with struct arrays
 
-char rxBuffer[32];  // was 64, but I doubt we need this
+char rxBuffer[16]; // was 64, but I doubt we need it that big
 
 uint16_t loop_delay_ts = millis();
 #define LOOP_DELAY 1000
@@ -284,7 +287,7 @@ void setHidMode() {
   bluetooth.flush();
   debug_out("Setting Hid Mode \"S~,6\"");
   bluetooth.print("S~,6");
-  bluetooth.write('\r');
+  bluetooth.write(bluetooth_newline);
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
   bluetooth.flush();
@@ -303,7 +306,7 @@ void setHidMode() {
       // reboot to complete mode change
       debug_out("Rebooting to change Hid mode");
       bluetooth.print("R,1");
-      bluetooth.write('\r');
+      bluetooth.write(bluetooth_newline);
       delay(BLUETOOTH_RESPONSE_DELAY);
       bluetoothReceive(rxBuffer);
     
@@ -322,7 +325,7 @@ void setHidMode() {
       try to reboot regardless.
     */
     bluetooth.print("R,1");
-    bluetooth.write('\r');
+    bluetooth.write(bluetooth_newline);
   #endif
 
   // reboot takes longer to come back
@@ -331,7 +334,7 @@ void setHidMode() {
   // get back in to command mode
   bluetooth.flush();  // delete buffer contents
   debug_out("Returning to command mode");
-  bluetooth.print("$$$");  // Command mode string
+  bluetooth.print(command_mode_cmd);  // Command mode string
   bluetoothReceive(rxBuffer);
   #ifdef DEBUG
     if (bluetoothCheckReceive(rxBuffer, "CMD", 3)) {
@@ -358,10 +361,10 @@ void bluetoothSetup() {
   delay(BLUETOOTH_RESPONSE_DELAY);
   
   bluetooth.flush();  // delete buffer contents
-  bluetooth.print("$$$");  // Command mode string
+  bluetooth.print(command_mode_cmd);  // Command mode string
   do // This gets the module out of state 3
   {  // continuously send \r until there is a response, usually '?'
-    bluetooth.write('\r');  
+    bluetooth.write(bluetooth_newline);  
     debug_out("-");  // Debug info for how many \r's required to get a respsonse
   } while ((!bluetooth.available()) && (timeout-- > 0));
   
@@ -410,7 +413,7 @@ uint8_t processCommand(struct commandWithCallback cmd) {
   bluetooth.flush();
   debug_out("Sending command '" + String(cmd.cmd) + "'");
   bluetooth.print(cmd.cmd);
-  bluetooth.write('\r');
+  bluetooth.write(bluetooth_newline);
   delay(BLUETOOTH_RESPONSE_DELAY);
   bluetoothReceive(rxBuffer);
   if (bluetoothCheckReceive(rxBuffer, cmd.expected, cmd.bufferSize)) {
