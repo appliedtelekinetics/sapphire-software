@@ -14,14 +14,7 @@
   - bluetooth module power saving
 */
 
-#define DEBUG
-#define ENABLE_SLEEP
-#define SLEEP_METHOD SLEEP_MODE_ADC // also defined in mcu blocks
-/* SLEEP_MODE_IDLE     - least power savings
-   SLEEP_MODE_ADC
-   SLEEP_MODE_PWR_SAVE - good
-   SLEEP_MODE_STANDBY
-   SLEEP_MODE_PWR_DOWN - most power savings */
+//#define DEBUG
   
 #ifdef DEBUG  
   #define debug_out(msg) Serial.println(msg)
@@ -30,7 +23,13 @@
 #endif
 
 #ifdef __AVR_ATmega328P__ // Duemilanove/Uno/Boarduino
+  #define ENABLE_SLEEP
   #define SLEEP_METHOD SLEEP_MODE_PWR_SAVE
+  /* SLEEP_MODE_IDLE     - least power savings
+   SLEEP_MODE_ADC
+   SLEEP_MODE_PWR_SAVE - good
+   SLEEP_MODE_STANDBY
+   SLEEP_MODE_PWR_DOWN - most power savings */
 
   #define BLUETOOTH_RX_PIN 5
   #define BLUETOOTH_TX_PIN 4
@@ -46,8 +45,15 @@
   #define MATRIX_C_PIN 10
 
 #elif __AVR_ATmega32U4__ // Micro/Leonardo
+  #define ENABLE_SLEEP
   #define SLEEP_METHOD SLEEP_MODE_ADC
-  #define BLUETOOTH_RX_PIN 8
+  /* SLEEP_MODE_IDLE     - least power savings
+   SLEEP_MODE_ADC
+   SLEEP_MODE_PWR_SAVE - good
+   SLEEP_MODE_STANDBY
+   SLEEP_MODE_PWR_DOWN - most power savings */
+
+  #define BLUETOOTH_RX_PIN 8 
   #define BLUETOOTH_TX_PIN 7
 
   #define BLUETOOTH_ENABLE_PIN 6
@@ -64,12 +70,15 @@
 #else
   #warning Unkown Processor Type
   // ATTiny84
+  // #define ENABLE_SLEEP
+  // #define SLEEP_METHOD SLEEP_MODE_PWR_DOWN
+  
   #define BLUETOOTH_RX_PIN 1
   #define BLUETOOTH_TX_PIN 0
 
   #define BLUETOOTH_ENABLE_PIN 3
 
-  #define BUTTON_INTERRUPT 3 // Pin or Interrupt? Not sure
+  #define BUTTON_INTERRUPT 0
 
   #define BUTTON_INTERRUPT_PIN 2
 
@@ -186,9 +195,6 @@ void setup() {
   for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
-
-  pinMode(13, OUTPUT);
-  digitalWrite(13, LOW);
 
   attachInterrupt(BUTTON_INTERRUPT, processButtons, CHANGE);
 }
