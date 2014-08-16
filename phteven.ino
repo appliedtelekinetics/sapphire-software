@@ -226,13 +226,14 @@ void loop() {
       debug_out("Key released.");
       send_consumer_key(0x0);
       key_released = false;
+      sleep_loop_counter = 0;
     }
   }
 
   if (millis() > (loop_delay_ts + LOOP_DELAY)) {
     loop_delay_ts = millis();
     debug_out(millis());
-    
+
     #ifdef ENABLE_SLEEP
       if (!key_released) { // dont sleep while button pressed
         sleep_loop_counter++;
@@ -243,6 +244,7 @@ void loop() {
           set_sleep_mode(SLEEP_METHOD);
           sleep_enable();
           sleep_cpu();
+          sleep_disable();
         }
       }
     #endif
