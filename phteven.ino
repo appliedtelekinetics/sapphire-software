@@ -70,8 +70,8 @@
 #else
   #warning Unkown Processor Type
   // ATTiny84
-  // #define ENABLE_SLEEP
-  // #define SLEEP_METHOD SLEEP_MODE_PWR_DOWN
+  #define ENABLE_SLEEP
+  #define SLEEP_METHOD SLEEP_MODE_PWR_DOWN
   
   #define BLUETOOTH_RX_PIN 1
   #define BLUETOOTH_TX_PIN 0
@@ -196,40 +196,10 @@ void setup() {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
 
-  attachInterrupt(BUTTON_INTERRUPT, processButtons, CHANGE);
+  attachInterrupt(BUTTON_INTERRUPT, wake, LOW);
 }
 
 void loop() {
-  if (key_code > 0x0) {
-    debug_out("Key: " + String(key_code));
-    send_consumer_key(key_code);
-    key_code = 0x0;
-  }
-  if (key_released) {
-    debug_out("Key released.");
-    send_consumer_key(0x0);
-    key_released = false;
-  }
-  if (millis() > (loop_delay_ts + LOOP_DELAY)) {
-    loop_delay_ts = millis();
-    debug_out(millis());
-    
-    #ifdef ENABLE_SLEEP
-      sleep_loop_counter++;
-      if (sleep_loop_counter >= SLEEP_COUNTER_TRIGGER) {
-        debug_out("Going to sleep.");
-        delay(1000);
-        sleep_loop_counter = 0;
-        set_sleep_mode(SLEEP_METHOD);
-        sleep_enable();
-        sleep_cpu();
-      }
-    #endif
-  }
-}
-
-void processButtons() {
-  noInterrupts();
   #ifdef ENABLE_SLEEP
     sleep_disable();
     sleep_loop_counter = 0;
@@ -246,13 +216,41 @@ void processButtons() {
       }
 
       key_code = keyMaskToKeyCode(key_mask);
-
+      debug_out("Key: " + String(key_code));
+      send_consumer_key(key_code);
+      key_code = 0x0;
+      key_released = true;
     }
   } else {
-    key_released = true;
+    if (key_released) {
+      debug_out("Key released.");
+      send_consumer_key(0x0);
+      key_released = false;
+    }
   }
 
-  interrupts();
+  if (millis() > (loop_delay_ts + LOOP_DELAY)) {
+    loop_delay_ts = millis();
+    debug_out(millis());
+    
+    #ifdef ENABLE_SLEEP
+      if (!key_released) { // dont sleep while button pressed
+        sleep_loop_counter++;
+        if (sleep_loop_counter >= SLEEP_COUNTER_TRIGGER) {
+          debug_out("Going to sleep.");
+          delay(100);
+          sleep_loop_counter = 0;
+          set_sleep_mode(SLEEP_METHOD);
+          sleep_enable();
+          sleep_cpu();
+        }
+      }
+    #endif
+  }
+}
+
+void wake() {
+  //no-op, just need an ISR
 }
 
 /*
