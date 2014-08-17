@@ -36,8 +36,8 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
-  #define BUTTON_INTERRUPT 0
-  #define BUTTON_INTERRUPT_PIN 2
+  // #define BUTTON_INTERRUPT 0
+  // #define BUTTON_INTERRUPT_PIN 2
 
   // For matrix buttons
   #define MATRIX_A_PIN 8
@@ -58,9 +58,8 @@
 
   #define BLUETOOTH_ENABLE_PIN 6
 
-  #define BUTTON_INTERRUPT 0
-
-  #define BUTTON_INTERRUPT_PIN 3
+  // #define BUTTON_INTERRUPT 0
+  // #define BUTTON_INTERRUPT_PIN 3
 
   // For matrix buttons
   #define MATRIX_A_PIN 9
@@ -78,9 +77,8 @@
 
   #define BLUETOOTH_ENABLE_PIN 3
 
-  #define BUTTON_INTERRUPT 0
-
-  #define BUTTON_INTERRUPT_PIN 2
+  // #define BUTTON_INTERRUPT 0
+  // #define BUTTON_INTERRUPT_PIN 2
 
   // For matrix buttons
   #define MATRIX_A_PIN 8
@@ -179,6 +177,13 @@ uint16_t keyMaskToKeyCode(uint8_t key_mask) {
   return 0;
 }
 
+#ifndef cbi
+#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+#endif
+#ifndef sbi
+#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
+
 void setup() {
   #ifdef DEBUG
   Serial.begin(9600);
@@ -188,16 +193,24 @@ void setup() {
 
   pinMode(BLUETOOTH_ENABLE_PIN, OUTPUT);
   digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
+  delay(1000);
   bluetoothSetup();
 
-  pinMode(BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
+  // pinMode(BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
 
   for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
 
-  attachInterrupt(BUTTON_INTERRUPT, wake, LOW);
+  // attachInterrupt(BUTTON_INTERRUPT, wake, LOW);
+
+  sbi(GIMSK,PCIE0); // Turn on Pin Change interrupt
+  sbi(PCMSK0,PCINT0); // Which pins are affected by the interrupt
+  sbi(PCMSK0,PCINT1);
+  sbi(PCMSK0,PCINT2);
 }
+
+boolean key_triggered = false;
 
 void loop() {
   #ifdef ENABLE_SLEEP
@@ -205,7 +218,16 @@ void loop() {
     sleep_loop_counter = 0;
   #endif
 
-  if (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
+  for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
+    if (digitalRead(matrix_pins[i]) == LOW) {
+      key_triggered = true;
+      break;
+    }
+  }
+
+  // if (digitalRead(BUTTON_INTERRUPT_PIN) == LOW) {
+  if (key_triggered) {
+    key_triggered = false;
     if (key_code == 0x0) {
       char key_mask = 0x0;
       for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
