@@ -25,7 +25,8 @@
 #ifdef __AVR_ATmega328P__ // Duemilanove/Uno/Boarduino
   #define ENABLE_SLEEP
   #define SLEEP_METHOD SLEEP_MODE_PWR_SAVE
-  /* SLEEP_MODE_IDLE     - least power savings
+  /* ATmega sleep modes:
+   SLEEP_MODE_IDLE     - least power savings
    SLEEP_MODE_ADC
    SLEEP_MODE_PWR_SAVE - good
    SLEEP_MODE_STANDBY
@@ -47,7 +48,8 @@
 #elif __AVR_ATmega32U4__ // Micro/Leonardo
   #define ENABLE_SLEEP
   #define SLEEP_METHOD SLEEP_MODE_ADC
-  /* SLEEP_MODE_IDLE     - least power savings
+  /* ATmega sleep modes:
+   SLEEP_MODE_IDLE     - least power savings
    SLEEP_MODE_ADC
    SLEEP_MODE_PWR_SAVE - good
    SLEEP_MODE_STANDBY
@@ -71,6 +73,11 @@
   // ATTiny84
   #define ENABLE_SLEEP
   #define SLEEP_METHOD SLEEP_MODE_PWR_DOWN
+  /* ATtiny sleep modes are:
+   SLEEP_MODE_IDLE     - least power savings
+   SLEEP_MODE_ADC
+   SLEEP_MODE_PWR_DOWN - most power savings
+  */
   
   #define BLUETOOTH_RX_PIN 1
   #define BLUETOOTH_TX_PIN 0
