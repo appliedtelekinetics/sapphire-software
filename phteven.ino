@@ -2,7 +2,7 @@
   TODO:
   - pairing mode function
   - pairing mode keypress ( long press keyboard toggle button )
-  - factory reset function (send "SF,1" then run bluetoothSetup() or reset the MCU)
+  - factory reset function (send "SF,1" or "SF,Z" then run bluetoothSetup() or reset the MCU)
   - factory reset button combination ( Home + Pair for 5 seconds? )
   - get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
   - enable status reports from module and read them regularly, watching for disconnection
@@ -80,10 +80,32 @@
   // #define BUTTON_INTERRUPT 0
   // #define BUTTON_INTERRUPT_PIN 2
 
+  #define PAIRING_RESET_BUTTON 7
+
+  #define STATUS_LED_PIN 4
+
   // For matrix buttons
   #define MATRIX_A_PIN 8
   #define MATRIX_B_PIN 9
   #define MATRIX_C_PIN 10
+
+  #define MATRIX_A_PCI PCINT0
+  #define MATRIX_B_PCI PCINT1
+  #define MATRIX_C_PCI PCINT2
+
+  #define PAIRING_RESET_PCI PCINT3
+
+  #define PCI_VECTOR PCIE0
+  #define PCI_INTERRUPT_SFR PCMSK0
+  #define PCI_ENABLE_SFR GIMSK
+
+#endif
+
+#ifndef cbi
+  #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+#endif
+#ifndef sbi
+  #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
 #include <avr/pgmspace.h>
@@ -169,20 +191,13 @@ const uint8_t matrix_pins[] = { MATRIX_A_PIN, MATRIX_B_PIN, MATRIX_C_PIN };
 uint16_t keyMaskToKeyCode(uint8_t key_mask) {
   for(uint8_t i = 0; i < KEY_MAPS_SIZE; i++) {
     if (keyMaps[i].key_mask == key_mask) {
-      // debug_out("Key: " + String(getKeyCodeDescription(keyMaps[i].key_code)));
+      debug_out("Key: " + String(getKeyCodeDescription(keyMaps[i].key_code)));
       return keyMaps[i].key_code;
     }
   }
-  // debug_out("Key not found for mask: " + String(key_mask, BIN));
+  debug_out("Key not found for mask: " + String(key_mask, BIN));
   return 0;
 }
-
-#ifndef cbi
-#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
-#endif
-#ifndef sbi
-#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
-#endif
 
 void setup() {
   #ifdef DEBUG
@@ -192,22 +207,22 @@ void setup() {
   bluetooth.begin(9600);
 
   pinMode(BLUETOOTH_ENABLE_PIN, OUTPUT);
-  digitalWrite(BLUETOOTH_ENABLE_PIN, LOW);
-  delay(1000);
+  delay(500);
+  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   bluetoothSetup();
-
-  // pinMode(BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
 
   for (uint8_t i = 0; i < sizeof(matrix_pins); i++) {
     pinMode(matrix_pins[i], INPUT_PULLUP);
   }
 
-  // attachInterrupt(BUTTON_INTERRUPT, wake, LOW);
+  pinMode(PAIRING_RESET_BUTTON, INPUT_PULLUP);
+  pinMode(STATUS_LED_PIN, OUTPUT);
 
-  sbi(GIMSK,PCIE0); // Turn on Pin Change interrupt
-  sbi(PCMSK0,PCINT0); // Which pins are affected by the interrupt
-  sbi(PCMSK0,PCINT1);
-  sbi(PCMSK0,PCINT2);
+  sbi(PCI_ENABLE_SFR,PCI_VECTOR); // Turn on Pin Change interrupt
+  sbi(PCI_INTERRUPT_SFR,MATRIX_A_PCI); // Which pins are affected by the interrupt
+  sbi(PCI_INTERRUPT_SFR,MATRIX_B_PCI);
+  sbi(PCI_INTERRUPT_SFR,MATRIX_C_PCI);
+  sbi(PCI_INTERRUPT_SFR,PAIRING_RESET_PCI);
 }
 
 boolean key_triggered = false;
@@ -217,6 +232,22 @@ void loop() {
     sleep_disable();
     sleep_loop_counter = 0;
   #endif
+
+  if (digitalRead(PAIRING_RESET_BUTTON) == LOW) {
+    uint16_t pairing_button_press_start = millis();
+    uint16_t pairing_button_press_end;
+    while (digitalRead(PAIRING_RESET_BUTTON) == LOW) {
+      pairing_button_press_end = millis();
+    }
+    if (pairing_button_press_end - pairing_button_press_start > 1000) {
+      for (uint8_t i = 0; i < 5; i++) {
+        digitalWrite(STATUS_LED_PIN, HIGH);
+        delay(100);
+        digitalWrite(STATUS_LED_PIN, LOW);
+        delay(100);
+      }
+    }
+  }
 
   for (uint8_t i = 0; i < MATRIX_PIN_COUNT; i++) {
     if (digitalRead(matrix_pins[i]) == LOW) {
@@ -272,40 +303,6 @@ void loop() {
     #endif
   }
 }
-
-void wake() {
-  //no-op, just need an ISR
-}
-
-/*
-  
-SF,1
-  Reset to factory defaults
-SM,<mode> / GM
-  Set/get connection mode:
-    0 Slave Mode
-    1 Master Mode
-    2 Trigger Mode
-    3 Auto-Connect Master Mode
-    4 Auto-Connect DTR Mode
-    5 Auto-Connect Any Mode
-    6 Pairing Mode 
-SP,<string>
-  Set the security pin code (ex: SP,1234)
-SU,<value>
-  Set uart baud rate (examples: SU,96 SU,57, SU,11
-C
-  Connect to last stored BT address stored (either automatic or with SR)
-SR,<mac address> / GR
-  Set/get the current bluetooth mac address
-SA,<flag> / GA
-  Set/get authentication method
-    0 Open
-    1 Keyboard I/O Mode (Default)
-    2 "Just works" mode
-    4 Auth with pin code
-
- */
 
 void setHidMode() {
   bluetooth.flush();
@@ -377,7 +374,6 @@ void bluetoothSetup() {
     delay(3000);
   #endif
   debug_out("Setting up bluetooth module");
-  digitalWrite(BLUETOOTH_ENABLE_PIN, HIGH);
   delay(500);
 
   int timeout = 1000;  // timeout, in the rare case the module is unresponsive
