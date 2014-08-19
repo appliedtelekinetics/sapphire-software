@@ -2,7 +2,7 @@
   TODO:
   - pairing mode function
   - pairing mode keypress ( long press keyboard toggle button )
-  - factory reset function (send "SF,1" or "SF,Z" then run bluetoothSetup() or reset the MCU)
+  - factory reset function (send "SF,1"(fac reset) or "SR,Z" (erase stored mac) then run bluetoothSetup() or reset the MCU)
   - factory reset button combination ( Home + Pair for 5 seconds? )
   - get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
   - enable status reports from module and read them regularly, watching for disconnection
@@ -154,6 +154,7 @@ uint16_t loop_delay_ts = millis();
 
 uint16_t key_code = 0x0;
 boolean key_released = false;
+boolean key_triggered = false;
 
 volatile uint8_t sleep_loop_counter = 0;
 #define SLEEP_COUNTER_TRIGGER 5
@@ -232,8 +233,6 @@ void setup() {
   sbi(PCI_INTERRUPT_SFR,PAIRING_RESET_PCI);
 }
 
-boolean key_triggered = false;
-
 void loop() {
   #ifdef ENABLE_SLEEP
     sleep_disable();
@@ -247,7 +246,7 @@ void loop() {
       pairing_button_press_end = millis();
     }
     if (pairing_button_press_end - pairing_button_press_start > 1000) {
-      for (uint8_t i = 0; i < 5; i++) {
+      for (uint8_t i = 0; i < 10; i++) {
         digitalWrite(STATUS_LED_PIN, HIGH);
         delay(100);
         digitalWrite(STATUS_LED_PIN, LOW);
