@@ -2,6 +2,7 @@
   TODO:
   - pairing mode function
   - pairing mode keypress ( long press keyboard toggle button )
+  - Disable repeat on certain buttons (like volume control and play/pause)
   - factory reset function (send "SF,1"(fac reset) or "SR,Z" (erase stored mac) then run bluetoothSetup() or reset the MCU)
   - factory reset button combination ( Home + Pair for 5 seconds? )
   - get remote address regularly, store in eeprom for more reliable reconnecting with C,<ADDR>
